@@ -2,7 +2,8 @@ import { get, post, put, del } from '../lib/request';
 import {
   LoginResponse, AccountDetail, Order, PaginatedResponse,
   AdminStats, Card, SystemSettings, ApiResponse, OrderAnalytics,
-  Item, AIReplySettings, ShippingRule, ReplyRule, DefaultReply
+  Item, AIReplySettings, ShippingRule, ReplyRule, DefaultReply,
+  BlacklistEntry, DeliveryRetryEntry
 } from '../types';
 
 // Auth
@@ -473,4 +474,37 @@ export const deleteDefaultReply = async (cookieId: string): Promise<ApiResponse>
 
 export const clearDefaultReplyRecords = async (cookieId: string): Promise<ApiResponse> => {
   return post(`/api/default-reply/${cookieId}/clear-records`, {});
+};
+
+// Blacklist
+export const getBlacklist = async (page?: number, pageSize?: number): Promise<{ success: boolean; data: BlacklistEntry[]; total: number; page: number; page_size: number }> => {
+  const params = new URLSearchParams();
+  if (page) params.append('page', String(page));
+  if (pageSize) params.append('page_size', String(pageSize));
+  return get(`/api/blacklist?${params.toString()}`);
+};
+
+export const addToBlacklist = async (buyerId: string, buyerName?: string, reason?: string): Promise<ApiResponse> => {
+  return post('/api/blacklist', { buyer_id: buyerId, buyer_name: buyerName || '', reason: reason || '' });
+};
+
+export const removeFromBlacklist = async (id: number): Promise<ApiResponse> => {
+  return del(`/api/blacklist/${id}`);
+};
+
+// Delivery Retry Queue
+export const getDeliveryRetryQueue = async (cookieId?: string, page?: number, pageSize?: number): Promise<{ success: boolean; data: DeliveryRetryEntry[]; total: number; page: number; page_size: number }> => {
+  const params = new URLSearchParams();
+  if (cookieId) params.append('cookie_id', cookieId);
+  if (page) params.append('page', String(page));
+  if (pageSize) params.append('page_size', String(pageSize));
+  return get(`/api/delivery-retry-queue?${params.toString()}`);
+};
+
+export const retryDelivery = async (id: number): Promise<ApiResponse> => {
+  return post(`/api/delivery-retry-queue/${id}/retry`);
+};
+
+export const deleteDeliveryRetry = async (id: number): Promise<ApiResponse> => {
+  return del(`/api/delivery-retry-queue/${id}`);
 };

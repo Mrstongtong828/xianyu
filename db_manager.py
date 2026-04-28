@@ -507,6 +507,45 @@ class DBManager:
             )
             ''')
 
+            # 创建发货失败重试队列表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS delivery_retry_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cookie_id TEXT NOT NULL,
+                order_id TEXT,
+                item_id TEXT,
+                buyer_id TEXT,
+                buyer_name TEXT DEFAULT '',
+                chat_id TEXT DEFAULT '',
+                quantity INTEGER DEFAULT 1,
+                spec_name TEXT DEFAULT '',
+                spec_value TEXT DEFAULT '',
+                error_type TEXT NOT NULL DEFAULT 'no_match',
+                error_message TEXT DEFAULT '',
+                retry_count INTEGER DEFAULT 0,
+                max_retries INTEGER DEFAULT 5,
+                next_retry_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE
+            )
+            ''')
+
+            # 创建买家黑名单表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS buyer_blacklist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                buyer_id TEXT NOT NULL,
+                buyer_name TEXT DEFAULT '',
+                reason TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, buyer_id)
+            )
+            ''')
+
             # 检查并升级数据库
             self.check_and_upgrade_db(cursor)
 
@@ -583,6 +622,9 @@ class DBManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_control_cookie ON risk_control_logs(cookie_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_keywords_cookie ON keywords(cookie_id, id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_default_reply_records_cookie ON default_reply_records(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_delivery_retry_status ON delivery_retry_queue(status, next_retry_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_delivery_retry_cookie ON delivery_retry_queue(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_buyer_blacklist_user ON buyer_blacklist(user_id)')
             logger.info("数据库索引创建/检查完成")
         except Exception as e:
             logger.warning(f"创建索引时出现警告: {e}")
@@ -1392,14 +1434,15 @@ class DBManager:
         with self.lock:
             try:
                 cursor = self.conn.cursor()
-                self._execute_sql(cursor, "SELECT id, value, created_at FROM cookies WHERE id = ?", (cookie_id,))
+                self._execute_sql(cursor, "SELECT id, value, user_id, created_at FROM cookies WHERE id = ?", (cookie_id,))
                 result = cursor.fetchone()
                 if result:
                     return {
                         'id': result[0],
                         'cookies_str': result[1],  # 使用cookies_str字段名以匹配调用方期望
                         'value': result[1],        # 保持向后兼容
-                        'created_at': result[2]
+                        'user_id': result[2],
+                        'created_at': result[3]
                     }
                 return None
             except Exception as e:
@@ -5796,6 +5839,193 @@ class DBManager:
             cursor = self.conn.cursor()
             cursor.execute('DELETE FROM user_sessions WHERE token=?', (token,))
             self.conn.commit()
+
+    def add_delivery_retry(self, cookie_id: str, order_id: str = None, item_id: str = None,
+                           buyer_id: str = None, buyer_name: str = '', chat_id: str = '',
+                           quantity: int = 1, spec_name: str = '', spec_value: str = '',
+                           error_type: str = 'no_match', error_message: str = '') -> int:
+        """添加发货失败重试记录"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT INTO delivery_retry_queue
+                    (cookie_id, order_id, item_id, buyer_id, buyer_name, chat_id,
+                     quantity, spec_name, spec_value, error_type, error_message, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+                ''', (cookie_id, order_id, item_id, buyer_id, buyer_name, chat_id,
+                      quantity, spec_name, spec_value, error_type, error_message))
+                self.conn.commit()
+                retry_id = cursor.lastrowid
+                logger.info(f"发货失败已加入重试队列: id={retry_id}, order={order_id}, 买家={buyer_name}")
+                return retry_id
+        except Exception as e:
+            logger.error(f"添加发货重试记录失败: {e}")
+            return -1
+
+    def get_pending_delivery_retries(self) -> list:
+        """获取需要重试的发货记录"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT * FROM delivery_retry_queue
+                    WHERE status IN ('pending', 'retrying')
+                    AND next_retry_at <= datetime('now', 'localtime')
+                    ORDER BY created_at ASC
+                ''')
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"获取待重试发货记录失败: {e}")
+            return []
+
+    def update_delivery_retry_status(self, retry_id: int, status: str, error_message: str = None,
+                                      increment_retry: bool = True, delay_minutes: int = 5) -> bool:
+        """更新发货重试状态"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                if increment_retry:
+                    cursor.execute('''
+                        UPDATE delivery_retry_queue
+                        SET status = ?, error_message = COALESCE(?, error_message),
+                            retry_count = retry_count + 1,
+                            next_retry_at = datetime('now', 'localtime', ? || ' minutes'),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (status, error_message, f'+{delay_minutes}', retry_id))
+                else:
+                    cursor.execute('''
+                        UPDATE delivery_retry_queue
+                        SET status = ?, error_message = COALESCE(?, error_message),
+                            next_retry_at = datetime('now', 'localtime', ? || ' minutes'),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (status, error_message, f'+{delay_minutes}', retry_id))
+                self.conn.commit()
+                logger.info(f"发货重试状态更新: id={retry_id}, status={status}")
+                return True
+        except Exception as e:
+            logger.error(f"更新发货重试状态失败: {e}")
+            return False
+
+    def get_delivery_retry_queue(self, cookie_id: str = None, page: int = 1, page_size: int = 20) -> dict:
+        """获取发货重试队列列表"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                where = ''
+                params = []
+                if cookie_id:
+                    where = 'WHERE cookie_id = ?'
+                    params.append(cookie_id)
+
+                cursor.execute(f'SELECT COUNT(*) FROM delivery_retry_queue {where}', params)
+                total = cursor.fetchone()[0]
+
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM delivery_retry_queue {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取发货重试队列失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def delete_delivery_retry(self, retry_id: int) -> bool:
+        """删除发货重试记录"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('DELETE FROM delivery_retry_queue WHERE id = ?', (retry_id,))
+                self.conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"删除发货重试记录失败: {e}")
+            return False
+
+    def add_to_blacklist(self, user_id: int, buyer_id: str, buyer_name: str = '', reason: str = '') -> bool:
+        """添加买家到黑名单"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO buyer_blacklist (user_id, buyer_id, buyer_name, reason)
+                    VALUES (?, ?, ?, ?)
+                ''', (user_id, buyer_id, buyer_name, reason))
+                self.conn.commit()
+                logger.info(f"买家已加入黑名单: user_id={user_id}, buyer_id={buyer_id}")
+                return True
+        except Exception as e:
+            logger.error(f"添加黑名单失败: {e}")
+            return False
+
+    def remove_from_blacklist(self, blacklist_id: int) -> bool:
+        """从黑名单移除"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('DELETE FROM buyer_blacklist WHERE id = ?', (blacklist_id,))
+                self.conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"移除黑名单失败: {e}")
+            return False
+
+    def get_blacklist(self, user_id: int = None, page: int = 1, page_size: int = 50) -> dict:
+        """获取黑名单列表"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                where = ''
+                params = []
+                if user_id:
+                    where = 'WHERE user_id = ?'
+                    params.append(user_id)
+
+                cursor.execute(f'SELECT COUNT(*) FROM buyer_blacklist {where}', params)
+                total = cursor.fetchone()[0]
+
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM buyer_blacklist {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取黑名单失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def is_buyer_blacklisted(self, user_id: int, buyer_id: str) -> bool:
+        """检查买家是否在黑名单中"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    'SELECT COUNT(*) FROM buyer_blacklist WHERE user_id = ? AND buyer_id = ?',
+                    (user_id, buyer_id)
+                )
+                return cursor.fetchone()[0] > 0
+        except Exception as e:
+            logger.error(f"检查黑名单失败: {e}")
+            return False
 
     def cleanup_expired_sessions(self):
         with self.lock:

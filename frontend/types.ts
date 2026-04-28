@@ -195,3 +195,31 @@ export interface DefaultReply {
   reply_once: boolean;
   reply_image_url?: string;
 }
+
+export interface BlacklistEntry {
+  id: number;
+  user_id: number;
+  buyer_id: string;
+  buyer_name: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface DeliveryRetryEntry {
+  id: number;
+  cookie_id: string;
+  order_id: string;
+  item_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  chat_id: string;
+  quantity: number;
+  error_type: string;
+  error_message: string;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at: string;
+  status: 'pending' | 'retrying' | 'failed' | 'success';
+  created_at: string;
+  updated_at: string;
+}

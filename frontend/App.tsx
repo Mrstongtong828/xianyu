@@ -10,6 +10,8 @@ const CardList = lazy(() => import('./components/CardList'));
 const ItemList = lazy(() => import('./components/ItemList'));
 const Settings = lazy(() => import('./components/Settings'));
 const Keywords = lazy(() => import('./components/Keywords'));
+const Blacklist = lazy(() => import('./components/Blacklist'));
+const DeliveryRetryQueue = lazy(() => import('./components/DeliveryRetryQueue'));
 
 const PageFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -164,6 +166,8 @@ const App: React.FC = () => {
         case 'cards': return <CardList />;
         case 'items': return <ItemList />;
         case 'keywords': return <Keywords />;
+        case 'blacklist': return <Blacklist />;
+        case 'delivery-retry': return <DeliveryRetryQueue />;
         case 'settings': return <Settings />;
         default: return <Dashboard />;
       }

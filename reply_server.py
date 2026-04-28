@@ -1905,7 +1905,6 @@ async def password_login(
     current_user: Dict[str, Any] = Depends(get_current_user),
     _rate=Depends(rate_limit(max_requests=10)),
 ):
-):
     """账号密码登录接口（异步，支持人脸认证）"""
     try:
         account_id = request.get('account_id')
@@ -7236,6 +7235,89 @@ async def import_orders(
     except Exception as e:
         log_with_user('error', f"导入订单失败: {str(e)}", current_user)
         raise HTTPException(status_code=500, detail=f"导入订单失败: {str(e)}")
+
+
+# ==================== 黑名单 API ====================
+
+class BlacklistAddRequest(BaseModel):
+    buyer_id: str
+    buyer_name: str = ''
+    reason: str = ''
+
+
+@app.get("/api/blacklist")
+async def get_blacklist(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取黑名单列表"""
+    user_id = current_user.get('user_id', 0)
+    result = db_manager.get_blacklist(user_id=user_id, page=page, page_size=page_size)
+    return {"success": True, **result}
+
+
+@app.post("/api/blacklist")
+async def add_to_blacklist(
+    data: BlacklistAddRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """添加买家到黑名单"""
+    user_id = current_user.get('user_id', 0)
+    success = db_manager.add_to_blacklist(
+        user_id=user_id, buyer_id=data.buyer_id,
+        buyer_name=data.buyer_name, reason=data.reason
+    )
+    if success:
+        return {"success": True, "message": "已添加到黑名单"}
+    raise HTTPException(status_code=500, detail="添加失败")
+
+
+@app.delete("/api/blacklist/{blacklist_id}")
+async def remove_from_blacklist(blacklist_id: int, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """从黑名单移除"""
+    success = db_manager.remove_from_blacklist(blacklist_id)
+    if success:
+        return {"success": True, "message": "已移除"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+
+# ==================== 发货重试队列 API ====================
+
+class DeliveryRetryQuery(BaseModel):
+    cookie_id: Optional[str] = None
+    page: int = 1
+    page_size: int = 20
+
+@app.get("/api/delivery-retry-queue")
+async def get_delivery_retry_queue(
+    cookie_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取发货重试队列"""
+    result = db_manager.get_delivery_retry_queue(cookie_id=cookie_id, page=page, page_size=page_size)
+    return {"success": True, **result}
+
+
+@app.post("/api/delivery-retry-queue/{retry_id}/retry")
+async def retry_delivery(retry_id: int, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """手动重试发货"""
+    db_manager.update_delivery_retry_status(
+        retry_id, 'pending', '手动触发重试',
+        increment_retry=False, delay_minutes=0
+    )
+    return {"success": True, "message": "已加入重试"}
+
+
+@app.delete("/api/delivery-retry-queue/{retry_id}")
+async def delete_delivery_retry(retry_id: int, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """删除发货重试记录"""
+    success = db_manager.delete_delivery_retry(retry_id)
+    if success:
+        return {"success": True, "message": "已删除"}
+    raise HTTPException(status_code=404, detail="记录不存在")
 
 
 # ==================== 前端 SPA Catch-All 路由 ====================

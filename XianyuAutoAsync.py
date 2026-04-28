@@ -330,6 +330,12 @@ class XianyuLive:
                 else:
                     logger.debug(f"【{self.cookie_id}】Cookie刷新任务已完成，跳过")
 
+            if self.delivery_retry_task:
+                if not self.delivery_retry_task.done():
+                    tasks_to_cancel.append(("发货重试任务", self.delivery_retry_task))
+                else:
+                    logger.debug(f"【{self.cookie_id}】发货重试任务已完成，跳过")
+
             if self.item_sync_task:
                 if not self.item_sync_task.done():
                     tasks_to_cancel.append(("商品同步任务", self.item_sync_task))
@@ -343,6 +349,7 @@ class XianyuLive:
                 self.token_refresh_task = None
                 self.cleanup_task = None
                 self.cookie_refresh_task = None
+                self.delivery_retry_task = None
                 self.item_sync_task = None
                 return
             
@@ -478,6 +485,7 @@ class XianyuLive:
             self.token_refresh_task = None
             self.cleanup_task = None
             self.cookie_refresh_task = None
+            self.delivery_retry_task = None
             self.item_sync_task = None
             logger.info(f"【{self.cookie_id}】后台任务引用已全部重置")
 
@@ -722,6 +730,9 @@ class XianyuLive:
         # Cookie刷新定时任务
         self.cookie_refresh_task = None
         self.cookie_refresh_interval = 1200  # 1小时 = 3600秒
+
+        # 发货失败重试任务
+        self.delivery_retry_task = None
         self.last_cookie_refresh_time = 0
         self.cookie_refresh_lock = asyncio.Lock()  # 使用Lock防止重复执行Cookie刷新
         self.cookie_refresh_enabled = True  # 是否启用Cookie刷新功能
@@ -1155,10 +1166,28 @@ class XianyuLive:
             logger.error(f"【{self.cookie_id}】提取订单ID失败: {self._safe_str(e)}")
             return None
 
+    def _is_buyer_blacklisted(self, buyer_id: str) -> bool:
+        try:
+            from db_manager import db_manager
+            from config import config
+            user_id = self.cookie_user_id if hasattr(self, 'cookie_user_id') else None
+            if not user_id:
+                cookie_info = db_manager.get_cookie_by_id(self.cookie_id)
+                if cookie_info:
+                    user_id = cookie_info.get('user_id')
+            if user_id:
+                return db_manager.is_buyer_blacklisted(user_id, buyer_id)
+        except Exception as e:
+            logger.error(f"黑名单检查失败: {self._safe_str(e)}")
+        return False
+
     async def _handle_auto_delivery(self, websocket, message: dict, send_user_name: str, send_user_id: str,
                                    item_id: str, chat_id: str, msg_time: str):
         """统一处理自动发货逻辑"""
         try:
+            if self._is_buyer_blacklisted(send_user_id):
+                logger.warning(f'[{msg_time}] 【{self.cookie_id}】⚠️ 买家 {send_user_id} 在黑名单中，跳过自动发货')
+                return
             # 检查商品是否属于当前cookies
             if item_id and item_id != "未知商品":
                 try:
@@ -1358,11 +1387,33 @@ class XianyuLive:
                         logger.warning(f'[{msg_time}] 【自动发货】未找到匹配的发货规则或获取发货内容失败')
                         # 发送自动发货失败通知
                         await self.send_delivery_failure_notification(send_user_name, send_user_id, item_id, "未找到匹配的发货规则或获取发货内容失败", chat_id)
+                        # 加入发货重试队列
+                        try:
+                            from db_manager import db_manager
+                            db_manager.add_delivery_retry(
+                                cookie_id=self.cookie_id, order_id=order_id, item_id=item_id,
+                                buyer_id=send_user_id, buyer_name=send_user_name, chat_id=chat_id,
+                                quantity=quantity_to_send, error_type='no_match',
+                                error_message='未找到匹配的发货规则或获取发货内容失败'
+                            )
+                        except Exception as retry_e:
+                            logger.error(f"加入发货重试队列失败: {self._safe_str(retry_e)}")
 
                 except Exception as e:
                     logger.error(f"自动发货处理异常: {self._safe_str(e)}")
                     # 发送自动发货异常通知
                     await self.send_delivery_failure_notification(send_user_name, send_user_id, item_id, f"自动发货处理异常: {str(e)}", chat_id)
+                    # 加入发货重试队列
+                    try:
+                        from db_manager import db_manager
+                        db_manager.add_delivery_retry(
+                            cookie_id=self.cookie_id, order_id=order_id, item_id=item_id,
+                            buyer_id=send_user_id, buyer_name=send_user_name, chat_id=chat_id,
+                            quantity=quantity_to_send, error_type='exception',
+                            error_message=str(e)[:500]
+                        )
+                    except Exception as retry_e:
+                        logger.error(f"加入发货重试队列失败: {self._safe_str(retry_e)}")
 
                 logger.info(f'[{msg_time}] 【{self.cookie_id}】订单锁释放: {lock_key}，自动发货处理完成')
 
@@ -4335,6 +4386,115 @@ class XianyuLive:
 
         return False
 
+    async def delivery_retry_loop(self):
+        """发货失败重试循环 - 定期检查重试队列并重试"""
+        logger.info(f"【{self.cookie_id}】发货重试循环已启动")
+        retry_interval = 300  # 5分钟检查一次
+        
+        while self._running:
+            try:
+                await asyncio.sleep(retry_interval)
+                if not self._running:
+                    break
+                
+                from db_manager import db_manager
+                pending_retries = db_manager.get_pending_delivery_retries()
+                cookie_retries = [r for r in pending_retries if r.get('cookie_id') == self.cookie_id]
+                
+                if not cookie_retries:
+                    continue
+                
+                logger.info(f"【{self.cookie_id}】发现 {len(cookie_retries)} 条待重试发货记录")
+                
+                for retry in cookie_retries:
+                    retry_id = retry.get('id')
+                    retry_count = retry.get('retry_count', 0)
+                    max_retries = retry.get('max_retries', 5)
+                    order_id = retry.get('order_id')
+                    item_id = retry.get('item_id')
+                    send_user_id = retry.get('buyer_id')
+                    send_user_name = retry.get('buyer_name', '')
+                    chat_id = retry.get('chat_id', '')
+                    quantity = retry.get('quantity', 1)
+                    
+                    if retry_count >= max_retries:
+                        db_manager.update_delivery_retry_status(
+                            retry_id, 'failed', f'已重试 {retry_count} 次，超过上限',
+                            increment_retry=False, delay_minutes=0
+                        )
+                        await self.send_delivery_failure_notification(
+                            send_user_name, send_user_id, item_id,
+                            f"发货重试失败（已达上限 {max_retries} 次）", chat_id
+                        )
+                        continue
+                    
+                    try:
+                        db_manager.update_delivery_retry_status(
+                            retry_id, 'retrying', '正在重试...',
+                            increment_retry=False, delay_minutes=5
+                        )
+                        
+                        delivery_contents = []
+                        for i in range(quantity):
+                            try:
+                                content = await self._auto_delivery(item_id, None, order_id, send_user_id)
+                                if content:
+                                    delivery_contents.append(content)
+                            except Exception as inner_e:
+                                logger.warning(f"重试发货第 {i+1}/{quantity} 个卡券失败: {self._safe_str(inner_e)}")
+                        
+                        if delivery_contents and self.websocket:
+                            # 有WebSocket连接直接发送
+                            for content in delivery_contents:
+                                if content.startswith('__IMAGE_SEND__'):
+                                    image_data = content.replace('__IMAGE_SEND__', '')
+                                    if '|' in image_data:
+                                        card_id_str, image_url = image_data.split('|', 1)
+                                        try:
+                                            await self.send_image_msg(self.websocket, chat_id, send_user_id, image_url, card_id=int(card_id_str))
+                                        except:
+                                            await self.send_image_msg(self.websocket, chat_id, send_user_id, image_url)
+                                    else:
+                                        await self.send_image_msg(self.websocket, chat_id, send_user_id, image_data)
+                                else:
+                                    await self.send_msg(self.websocket, chat_id, send_user_id, content)
+                                await asyncio.sleep(0.5)
+                            
+                            db_manager.update_delivery_retry_status(
+                                retry_id, 'success', '重试发货成功',
+                                increment_retry=False, delay_minutes=0
+                            )
+                            self.mark_delivery_sent(order_id)
+                            await self.send_delivery_failure_notification(
+                                send_user_name, send_user_id, item_id,
+                                f"重试发货成功（第 {retry_count + 1} 次重试）", chat_id
+                            )
+                            logger.info(f"【{self.cookie_id}】🎉 重试发货成功: retry_id={retry_id}, order={order_id}")
+                        else:
+                            error_msg = '获取发货内容失败' if not delivery_contents else 'WebSocket未连接，延迟重试'
+                            retry_delay = 30 if self.websocket else 5
+                            db_manager.update_delivery_retry_status(
+                                retry_id, 'pending', error_msg,
+                                increment_retry=True, delay_minutes=retry_delay
+                            )
+                            logger.warning(f"【{self.cookie_id}】重试发货失败: {error_msg}, retry_id={retry_id}")
+                            
+                    except Exception as retry_e:
+                        db_manager.update_delivery_retry_status(
+                            retry_id, 'pending', str(retry_e)[:500],
+                            increment_retry=True, delay_minutes=10
+                        )
+                        logger.error(f"【{self.cookie_id}】重试发货异常: {self._safe_str(retry_e)}")
+                
+            except asyncio.CancelledError:
+                logger.info(f"【{self.cookie_id}】发货重试循环被取消")
+                break
+            except Exception as e:
+                logger.error(f"【{self.cookie_id}】发货重试循环异常: {self._safe_str(e)}")
+                await asyncio.sleep(60)
+        
+        logger.info(f"【{self.cookie_id}】发货重试循环已停止")
+
     async def send_delivery_failure_notification(self, send_user_name: str, send_user_id: str, item_id: str, error_message: str, chat_id: str = None):
         """发送自动发货失败通知"""
         try:
@@ -7305,6 +7465,10 @@ class XianyuLive:
             msg_time: 消息时间
         """
         try:
+            if self._is_buyer_blacklisted(send_user_id):
+                logger.warning(f"[{msg_time}] 【{self.cookie_id}】⚠️ 买家 {send_user_id} 在黑名单中，跳过自动回复")
+                return
+
             # 自动回复消息
             if not AUTO_REPLY.get('enabled', True):
                 logger.info(f"[{msg_time}] 【{self.cookie_id}】【系统】自动回复已禁用")
@@ -7830,6 +7994,19 @@ class XianyuLive:
                 except Exception as e:
                     logger.error(f"订单状态处理失败: {self._safe_str(e)}")
 
+            # 检查买家是否在黑名单中
+            try:
+                from db_manager import db_manager
+                cookie_info = db_manager.get_cookie_by_id(self.cookie_id)
+                if cookie_info:
+                    user_id = cookie_info.get('user_id', 0)
+                    if user_id and send_user_id:
+                        if db_manager.is_buyer_blacklisted(user_id, send_user_id):
+                            logger.warning(f"【{self.cookie_id}】买家 {send_user_id} 在黑名单中，跳过自动回复/发货")
+                            return
+            except Exception as bl_e:
+                logger.error(f"【{self.cookie_id}】黑名单检查异常: {self._safe_str(bl_e)}")
+
             # 【优先处理】检查系统消息和自动发货触发消息（不受人工接入暂停影响）
             if send_message == '[我已拍下，待付款]':
                 logger.info(f'[{msg_time}] 【{self.cookie_id}】系统消息不处理')
@@ -8046,6 +8223,13 @@ class XianyuLive:
                             else:
                                 logger.info(f"【{self.cookie_id}】Cookie刷新任务已在运行，跳过启动")
 
+                            if not self.delivery_retry_task or self.delivery_retry_task.done():
+                                logger.info(f"【{self.cookie_id}】启动发货重试任务...")
+                                self.delivery_retry_task = asyncio.create_task(self.delivery_retry_loop())
+                                tasks_started.append("发货重试")
+                            else:
+                                logger.info(f"【{self.cookie_id}】发货重试任务已在运行，跳过启动")
+
                             # 启动商品同步任务
                             if self.item_sync_enabled:
                                 if not self.item_sync_task or self.item_sync_task.done():
@@ -8061,7 +8245,7 @@ class XianyuLive:
                             if tasks_started:
                                 logger.info(f"【{self.cookie_id}】✅ 新启动的任务: {', '.join(tasks_started)}")
                             item_sync_status = '运行中' if self.item_sync_task and not self.item_sync_task.done() else '已启动' if self.item_sync_enabled else '未启用'
-                            logger.info(f"【{self.cookie_id}】✅ 所有后台任务状态: 心跳(已启动), Token刷新({'运行中' if self.token_refresh_task and not self.token_refresh_task.done() else '已启动'}), 暂停清理({'运行中' if self.cleanup_task and not self.cleanup_task.done() else '已启动'}), Cookie刷新({'运行中' if self.cookie_refresh_task and not self.cookie_refresh_task.done() else '已启动'}), 商品同步({item_sync_status})")
+                            logger.info(f"【{self.cookie_id}】✅ 所有后台任务状态: 心跳(已启动), Token刷新({'运行中' if self.token_refresh_task and not self.token_refresh_task.done() else '已启动'}), 暂停清理({'运行中' if self.cleanup_task and not self.cleanup_task.done() else '已启动'}), Cookie刷新({'运行中' if self.cookie_refresh_task and not self.cookie_refresh_task.done() else '已启动'}), 发货重试({'运行中' if self.delivery_retry_task and not self.delivery_retry_task.done() else '已启动'}), 商品同步({item_sync_status})")
                             
                             logger.info(f"【{self.cookie_id}】开始监听WebSocket消息...")
                             logger.info(f"【{self.cookie_id}】WebSocket连接状态正常，等待服务器消息...")
@@ -8255,7 +8439,9 @@ class XianyuLive:
                         self.heartbeat_task = None
                         self.token_refresh_task = None
                         self.cleanup_task = None
+                        self.delivery_retry_task = None
                         self.cookie_refresh_task = None
+                        self.item_sync_task = None
                         logger.warning(f"【{self.cookie_id}】清理失败，已强制重置所有任务引用")
                         # 使用可中断的sleep，并定期输出日志
                         logger.info(f"【{self.cookie_id}】清理失败后开始等待 {retry_delay} 秒...")
@@ -8319,6 +8505,7 @@ class XianyuLive:
                     self.token_refresh_task = None
                     self.cleanup_task = None
                     self.cookie_refresh_task = None
+                    self.delivery_retry_task = None
             else:
                 logger.info(f"【{self.cookie_id}】所有后台任务已清理完成，跳过重复清理")
                 # 确保任务引用被重置
@@ -8326,6 +8513,7 @@ class XianyuLive:
                 self.token_refresh_task = None
                 self.cleanup_task = None
                 self.cookie_refresh_task = None
+                self.delivery_retry_task = None
             
             # 清理所有后台任务
             if self.background_tasks:
