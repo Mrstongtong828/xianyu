@@ -12,6 +12,8 @@ const Settings = lazy(() => import('./components/Settings'));
 const Keywords = lazy(() => import('./components/Keywords'));
 const Blacklist = lazy(() => import('./components/Blacklist'));
 const DeliveryRetryQueue = lazy(() => import('./components/DeliveryRetryQueue'));
+const ConversationList = lazy(() => import('./components/ConversationList'));
+const ItemSchedule = lazy(() => import('./components/ItemSchedule'));
 
 const PageFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -167,6 +169,8 @@ const App: React.FC = () => {
         case 'items': return <ItemList />;
         case 'keywords': return <Keywords />;
         case 'blacklist': return <Blacklist />;
+        case 'conversations': return <ConversationList />;
+        case 'item-schedule': return <ItemSchedule />;
         case 'delivery-retry': return <DeliveryRetryQueue />;
         case 'settings': return <Settings />;
         default: return <Dashboard />;

@@ -484,6 +484,60 @@ async def register_route():
 # 文件末尾的 catch-all 路由会处理前端页面的直接访问
 
 
+# ==================== 智能上下架 API ====================
+
+class ItemScheduleRequest(BaseModel):
+    cookie_id: str
+    item_id: str
+    item_title: str = ''
+    schedule_type: str = 'list'
+    schedule_time: str = ''
+    cron_expression: str = ''
+
+@app.get("/api/item-schedules")
+async def get_item_schedules(
+    cookie_id: Optional[str] = None,
+    schedule_type: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    schedules = db_manager.get_item_schedules(cookie_id=cookie_id, schedule_type=schedule_type)
+    return {"success": True, "data": schedules}
+
+@app.post("/api/item-schedules")
+async def add_item_schedule(
+    data: ItemScheduleRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    schedule_id = db_manager.add_item_schedule(
+        data.cookie_id, data.item_id, data.item_title,
+        data.schedule_type, data.schedule_time, data.cron_expression
+    )
+    if schedule_id:
+        return {"success": True, "message": "计划已添加", "id": schedule_id}
+    raise HTTPException(status_code=500, detail="添加失败")
+
+@app.put("/api/item-schedules/{schedule_id}")
+async def update_item_schedule(
+    schedule_id: int,
+    data: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    success = db_manager.update_item_schedule(schedule_id, data)
+    if success:
+        return {"success": True, "message": "已更新"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+@app.delete("/api/item-schedules/{schedule_id}")
+async def delete_item_schedule(
+    schedule_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    success = db_manager.delete_item_schedule(schedule_id)
+    if success:
+        return {"success": True, "message": "已删除"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+
 
 # 登录接口
 @app.post('/login')
@@ -7319,6 +7373,108 @@ async def delete_delivery_retry(retry_id: int, current_user: Dict[str, Any] = De
         return {"success": True, "message": "已删除"}
     raise HTTPException(status_code=404, detail="记录不存在")
 
+
+# ==================== 批量卡券导入 ====================
+
+class BatchCardImportItem(BaseModel):
+    name: str
+    type: str = 'text'
+    text_content: str = ''
+    data_content: str = ''
+    image_url: str = ''
+    description: str = ''
+    delay_seconds: int = 0
+
+class BatchCardImportRequest(BaseModel):
+    items: List[BatchCardImportItem]
+
+@app.post("/api/cards/batch-import")
+async def batch_import_cards(
+    request: BatchCardImportRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """批量导入卡券"""
+    if not request.items:
+        raise HTTPException(status_code=400, detail="导入数据为空")
+
+    user_id = current_user.get('user_id', 1)
+    success_count = 0
+    fail_count = 0
+    errors = []
+
+    for i, item in enumerate(request.items):
+        try:
+            if not item.name.strip():
+                errors.append({'row': i + 1, 'error': '卡券名称为空'})
+                fail_count += 1
+                continue
+
+            card_type = item.type if item.type in ('text', 'data', 'image', 'api') else 'text'
+
+            db_manager.create_card(
+                name=item.name.strip(),
+                card_type=card_type,
+                text_content=item.text_content or '',
+                data_content=item.data_content or '',
+                image_url=item.image_url or '',
+                description=item.description or '',
+                delay_seconds=item.delay_seconds,
+                user_id=user_id
+            )
+            success_count += 1
+        except Exception as e:
+            errors.append({'row': i + 1, 'error': str(e)[:200]})
+            fail_count += 1
+
+    return {
+        "success": True,
+        "total": len(request.items),
+        "success_count": success_count,
+        "fail_count": fail_count,
+        "errors": errors[:20]
+    }
+
+
+# ==================== AI对话历史 API ====================
+
+@app.get("/api/ai-conversations")
+async def get_ai_conversations(
+    cookie_id: Optional[str] = None,
+    chat_id: Optional[str] = None,
+    buyer_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取AI对话历史"""
+    result = db_manager.get_ai_conversations(
+        cookie_id=cookie_id, chat_id=chat_id, buyer_id=buyer_id,
+        page=page, page_size=page_size
+    )
+    return {"success": True, **result}
+
+@app.get("/api/ai-conversations/chats")
+async def get_ai_conversation_chats(
+    cookie_id: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取对话列表（用于筛选）"""
+    chats = db_manager.get_ai_conversation_chats(cookie_id=cookie_id)
+    return {"success": True, "data": chats}
+
+# ==================== 自动评价 API ====================
+
+@app.get("/api/evaluation-config/{cookie_id}")
+async def get_evaluation_config(cookie_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    config = db_manager.get_evaluation_config(cookie_id)
+    return {"success": True, "data": config}
+
+@app.put("/api/evaluation-config/{cookie_id}")
+async def update_evaluation_config(cookie_id: str, data: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_current_user)):
+    success = db_manager.update_evaluation_config(cookie_id, data)
+    if success:
+        return {"success": True, "message": "配置已更新"}
+    raise HTTPException(status_code=500, detail="更新失败")
 
 # ==================== 前端 SPA Catch-All 路由 ====================
 # 必须放在所有 API 路由之后，用于处理前端 SPA 的直接访问

@@ -223,3 +223,43 @@ export interface DeliveryRetryEntry {
   created_at: string;
   updated_at: string;
 }
+
+export interface EvaluationConfig {
+  auto_evaluate_enabled: boolean;
+  evaluate_content: string;
+  auto_reply_review_enabled: boolean;
+  reply_review_content: string;
+}
+
+export interface AIConversation {
+  id: number;
+  cookie_id: string;
+  chat_id: string;
+  user_id: string;
+  item_id: string;
+  role: string;
+  content: string;
+  intent?: string;
+  bargain_count?: number;
+  created_at: string;
+}
+
+export interface AIChatSummary {
+  chat_id: string;
+  buyer_id: string;
+  msg_count: number;
+  last_msg: string;
+}
+
+export interface ItemSchedule {
+  id: number;
+  cookie_id: string;
+  item_id: string;
+  item_title: string;
+  schedule_type: 'list' | 'delist';
+  schedule_time: string;
+  cron_expression: string;
+  enabled: boolean;
+  last_run_at?: string;
+  created_at: string;
+}

@@ -292,6 +292,9 @@ class XianyuLive:
         if self.item_sync_task:
             status = "已完成" if self.item_sync_task.done() else "运行中"
             other_tasks_status.append(f"商品同步任务({status})")
+        if self.item_schedule_task:
+            status = "已完成" if self.item_schedule_task.done() else "运行中"
+            other_tasks_status.append(f"智能上下架任务({status})")
 
         if other_tasks_status:
             logger.info(f"【{self.cookie_id}】其他任务继续运行（不依赖WebSocket）: {', '.join(other_tasks_status)}")
@@ -336,6 +339,12 @@ class XianyuLive:
                 else:
                     logger.debug(f"【{self.cookie_id}】发货重试任务已完成，跳过")
 
+            if self.item_schedule_task:
+                if not self.item_schedule_task.done():
+                    tasks_to_cancel.append(("智能上下架任务", self.item_schedule_task))
+                else:
+                    logger.debug(f"【{self.cookie_id}】智能上下架任务已完成，跳过")
+
             if self.item_sync_task:
                 if not self.item_sync_task.done():
                     tasks_to_cancel.append(("商品同步任务", self.item_sync_task))
@@ -350,6 +359,7 @@ class XianyuLive:
                 self.cleanup_task = None
                 self.cookie_refresh_task = None
                 self.delivery_retry_task = None
+                self.item_schedule_task = None
                 self.item_sync_task = None
                 return
             
@@ -486,6 +496,7 @@ class XianyuLive:
             self.cleanup_task = None
             self.cookie_refresh_task = None
             self.delivery_retry_task = None
+            self.item_schedule_task = None
             self.item_sync_task = None
             logger.info(f"【{self.cookie_id}】后台任务引用已全部重置")
 
@@ -733,6 +744,10 @@ class XianyuLive:
 
         # 发货失败重试任务
         self.delivery_retry_task = None
+
+        # 智能上下架定时任务
+        self.item_schedule_task = None
+
         self.last_cookie_refresh_time = 0
         self.cookie_refresh_lock = asyncio.Lock()  # 使用Lock防止重复执行Cookie刷新
         self.cookie_refresh_enabled = True  # 是否启用Cookie刷新功能
@@ -4386,6 +4401,98 @@ class XianyuLive:
 
         return False
 
+    async def item_schedule_loop(self):
+        """智能上下架定时检查循环"""
+        logger.info(f"【{self.cookie_id}】智能上下架循环已启动")
+
+        while self._running:
+            try:
+                await asyncio.sleep(60)
+
+                from db_manager import db_manager
+                pending = db_manager.get_pending_schedules()
+                cookie_schedules = [s for s in pending if s.get('cookie_id') == self.cookie_id]
+
+                for schedule in cookie_schedules:
+                    schedule_id = schedule.get('id')
+                    schedule_type = schedule.get('schedule_type')
+                    item_id = schedule.get('item_id')
+                    item_title = schedule.get('item_title', '')
+
+                    try:
+                        if schedule_type == 'list':
+                            await self._list_item(item_id, item_title)
+                        elif schedule_type == 'delist':
+                            await self._delist_item(item_id, item_title)
+
+                        db_manager.mark_schedule_run(schedule_id)
+                        logger.info(f"【{self.cookie_id}】✅ 定时任务完成: {schedule_type} {item_title}({item_id})")
+
+                        await self.send_delivery_failure_notification(
+                            '', '', item_id,
+                            f"定时{'上架' if schedule_type == 'list' else '下架'}完成: {item_title}",
+                            ''
+                        )
+                    except Exception as e:
+                        logger.error(f"【{self.cookie_id}】定时任务失败: {self._safe_str(e)}")
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"【{self.cookie_id}】智能上下架循环异常: {self._safe_str(e)}")
+                await asyncio.sleep(60)
+
+        logger.info(f"【{self.cookie_id}】智能上下架循环已停止")
+
+    async def _list_item(self, item_id: str, item_title: str):
+        try:
+            api = 'mtop.idle.item.publish'
+            data = {
+                'api': api,
+                'data': {
+                    'itemId': item_id,
+                    'itemStatus': '1'
+                }
+            }
+            url = 'https://h5api.m.goofish.com/h5/' + api + '/1.0/'
+            async with self.session.post(url, json=data, headers=self._get_headers()) as response:
+                res_json = await response.json()
+                logger.info(f"【{self.cookie_id}】上架响应: {json.dumps(res_json, ensure_ascii=False)[:200]}")
+                ret = res_json.get('ret', [])
+                if ret and len(ret) > 0:
+                    if ret[0].get('code') == 'SUCCESS':
+                        logger.info(f"【{self.cookie_id}】✅ 上架成功: {item_title}({item_id})")
+                        return True
+                logger.warning(f"【{self.cookie_id}】上架结果: {res_json}")
+                return False
+        except Exception as e:
+            logger.error(f"【{self.cookie_id}】上架异常: {self._safe_str(e)}")
+            return False
+
+    async def _delist_item(self, item_id: str, item_title: str):
+        try:
+            api = 'mtop.idle.item.delist'
+            data = {
+                'api': api,
+                'data': {
+                    'itemId': item_id
+                }
+            }
+            url = 'https://h5api.m.goofish.com/h5/' + api + '/1.0/'
+            async with self.session.post(url, json=data, headers=self._get_headers()) as response:
+                res_json = await response.json()
+                logger.info(f"【{self.cookie_id}】下架响应: {json.dumps(res_json, ensure_ascii=False)[:200]}")
+                ret = res_json.get('ret', [])
+                if ret and len(ret) > 0:
+                    if ret[0].get('code') == 'SUCCESS':
+                        logger.info(f"【{self.cookie_id}】✅ 下架成功: {item_title}({item_id})")
+                        return True
+                logger.warning(f"【{self.cookie_id}】下架结果: {res_json}")
+                return False
+        except Exception as e:
+            logger.error(f"【{self.cookie_id}】下架异常: {self._safe_str(e)}")
+            return False
+
     async def delivery_retry_loop(self):
         """发货失败重试循环 - 定期检查重试队列并重试"""
         logger.info(f"【{self.cookie_id}】发货重试循环已启动")
@@ -4616,6 +4723,44 @@ class XianyuLive:
         except Exception as e:
             logger.error(f"【{self.cookie_id}】免拼发货模块调用失败: {self._safe_str(e)}")
             return {"error": f"免拼发货模块调用失败: {self._safe_str(e)}", "order_id": order_id}
+
+    async def auto_evaluate(self, order_id: str, item_id: str = None, buyer_id: str = None):
+        """自动评价买家"""
+        try:
+            from db_manager import db_manager
+            config = db_manager.get_evaluation_config(self.cookie_id)
+            if not config.get('auto_evaluate_enabled', False):
+                return {'success': False, 'error': '自动评价未启用'}
+            
+            evaluate_content = config.get('evaluate_content', '感谢您的购买，欢迎再次光临！')
+            
+            evaluate_api = 'mtop.taobao.idle.rate.write'
+            data = {
+                'api': evaluate_api,
+                'data': {
+                    'bizOrderId': order_id,
+                    'content': evaluate_content,
+                    'score': 5,
+                }
+            }
+            
+            url = 'https://h5api.m.goofish.com/h5/' + evaluate_api + '/1.0/'
+            async with self.session.post(url, json=data, headers=self._get_headers()) as response:
+                res_json = await response.json()
+                ret = res_json.get('ret', [])
+                if ret and len(ret) > 0:
+                    ret_msg = ret[0]
+                    if ret_msg.get('code') == 'SUCCESS':
+                        logger.info(f"【{self.cookie_id}】✅ 自动评价成功: {order_id}")
+                        return {'success': True, 'message': '评价成功'}
+                    else:
+                        error_msg = ret_msg.get('msg', '未知错误')
+                        logger.warning(f"【{self.cookie_id}】❌ 自动评价失败: {order_id}, {error_msg}")
+                        return {'success': False, 'error': error_msg}
+                return {'success': False, 'error': 'API响应异常'}
+        except Exception as e:
+            logger.error(f"【{self.cookie_id}】自动评价异常: {self._safe_str(e)}")
+            return {'success': False, 'error': str(e)}
 
     async def fetch_order_detail_info(self, order_id: str, item_id: str = None, buyer_id: str = None, debug_headless: bool = None):
         """获取订单详情信息（使用独立的锁机制，不受延迟锁影响）"""
@@ -8027,10 +8172,22 @@ class XianyuLive:
                 logger.info(f'[{msg_time}] 【{self.cookie_id}】系统通知消息不处理')
                 return
             elif send_message == '[买家确认收货，交易成功]':
-                logger.info(f'[{msg_time}] 【{self.cookie_id}】交易完成消息不处理')
+                logger.info(f'[{msg_time}] 【{self.cookie_id}】交易完成消息，触发自动评价')
+                if self.order_status_handler:
+                    order_id = self.order_status_handler.extract_order_id(message)
+                    if order_id:
+                        asyncio.create_task(self.auto_evaluate(order_id, item_id, send_user_id))
+                    else:
+                        logger.warning(f'[{msg_time}] 【{self.cookie_id}】无法提取订单ID，跳过自动评价')
                 return
             elif send_message == '快给ta一个评价吧~' or send_message == '快给ta一个评价吧～':
-                logger.info(f'[{msg_time}] 【{self.cookie_id}】评价提醒消息不处理')
+                logger.info(f'[{msg_time}] 【{self.cookie_id}】评价提醒消息，触发自动评价')
+                if self.order_status_handler:
+                    order_id = self.order_status_handler.extract_order_id(message)
+                    if order_id:
+                        asyncio.create_task(self.auto_evaluate(order_id, item_id, send_user_id))
+                    else:
+                        logger.warning(f'[{msg_time}] 【{self.cookie_id}】无法提取订单ID，跳过自动评价')
                 return
             elif send_message == '卖家人不错？送Ta闲鱼小红花':
                 logger.info(f'[{msg_time}] 【{self.cookie_id}】小红花提醒消息不处理')
@@ -8230,6 +8387,13 @@ class XianyuLive:
                             else:
                                 logger.info(f"【{self.cookie_id}】发货重试任务已在运行，跳过启动")
 
+                            if not self.item_schedule_task or self.item_schedule_task.done():
+                                logger.info(f"【{self.cookie_id}】启动智能上下架任务...")
+                                self.item_schedule_task = asyncio.create_task(self.item_schedule_loop())
+                                tasks_started.append("智能上下架")
+                            else:
+                                logger.info(f"【{self.cookie_id}】智能上下架任务已在运行，跳过启动")
+
                             # 启动商品同步任务
                             if self.item_sync_enabled:
                                 if not self.item_sync_task or self.item_sync_task.done():
@@ -8245,7 +8409,7 @@ class XianyuLive:
                             if tasks_started:
                                 logger.info(f"【{self.cookie_id}】✅ 新启动的任务: {', '.join(tasks_started)}")
                             item_sync_status = '运行中' if self.item_sync_task and not self.item_sync_task.done() else '已启动' if self.item_sync_enabled else '未启用'
-                            logger.info(f"【{self.cookie_id}】✅ 所有后台任务状态: 心跳(已启动), Token刷新({'运行中' if self.token_refresh_task and not self.token_refresh_task.done() else '已启动'}), 暂停清理({'运行中' if self.cleanup_task and not self.cleanup_task.done() else '已启动'}), Cookie刷新({'运行中' if self.cookie_refresh_task and not self.cookie_refresh_task.done() else '已启动'}), 发货重试({'运行中' if self.delivery_retry_task and not self.delivery_retry_task.done() else '已启动'}), 商品同步({item_sync_status})")
+                            logger.info(f"【{self.cookie_id}】✅ 所有后台任务状态: 心跳(已启动), Token刷新({'运行中' if self.token_refresh_task and not self.token_refresh_task.done() else '已启动'}), 暂停清理({'运行中' if self.cleanup_task and not self.cleanup_task.done() else '已启动'}), Cookie刷新({'运行中' if self.cookie_refresh_task and not self.cookie_refresh_task.done() else '已启动'}), 发货重试({'运行中' if self.delivery_retry_task and not self.delivery_retry_task.done() else '已启动'}), 智能上下架({'运行中' if self.item_schedule_task and not self.item_schedule_task.done() else '已启动'}), 商品同步({item_sync_status})")
                             
                             logger.info(f"【{self.cookie_id}】开始监听WebSocket消息...")
                             logger.info(f"【{self.cookie_id}】WebSocket连接状态正常，等待服务器消息...")
@@ -8440,6 +8604,7 @@ class XianyuLive:
                         self.token_refresh_task = None
                         self.cleanup_task = None
                         self.delivery_retry_task = None
+                        self.item_schedule_task = None
                         self.cookie_refresh_task = None
                         self.item_sync_task = None
                         logger.warning(f"【{self.cookie_id}】清理失败，已强制重置所有任务引用")
@@ -8484,7 +8649,8 @@ class XianyuLive:
                 self.heartbeat_task and not self.heartbeat_task.done(),
                 self.token_refresh_task and not self.token_refresh_task.done(),
                 self.cleanup_task and not self.cleanup_task.done(),
-                self.cookie_refresh_task and not self.cookie_refresh_task.done()
+                self.cookie_refresh_task and not self.cookie_refresh_task.done(),
+                self.item_schedule_task and not self.item_schedule_task.done()
             ])
             
             if has_pending_tasks:
@@ -8506,6 +8672,7 @@ class XianyuLive:
                     self.cleanup_task = None
                     self.cookie_refresh_task = None
                     self.delivery_retry_task = None
+                    self.item_schedule_task = None
             else:
                 logger.info(f"【{self.cookie_id}】所有后台任务已清理完成，跳过重复清理")
                 # 确保任务引用被重置
@@ -8514,6 +8681,7 @@ class XianyuLive:
                 self.cleanup_task = None
                 self.cookie_refresh_task = None
                 self.delivery_retry_task = None
+                self.item_schedule_task = None
             
             # 清理所有后台任务
             if self.background_tasks:

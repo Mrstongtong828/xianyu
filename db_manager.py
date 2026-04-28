@@ -532,6 +532,24 @@ class DBManager:
             )
             ''')
 
+            # 创建智能上下架计划表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS item_schedule (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cookie_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                item_title TEXT DEFAULT '',
+                schedule_type TEXT NOT NULL CHECK (schedule_type IN ('list', 'delist')),
+                schedule_time TEXT,
+                cron_expression TEXT DEFAULT '',
+                enabled BOOLEAN DEFAULT TRUE,
+                last_run_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE
+            )
+            ''')
+
             # 创建买家黑名单表
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS buyer_blacklist (
@@ -543,6 +561,22 @@ class DBManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 UNIQUE(user_id, buyer_id)
+            )
+            ''')
+
+            # 创建自动评价配置表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS evaluation_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cookie_id TEXT NOT NULL,
+                auto_evaluate_enabled BOOLEAN DEFAULT FALSE,
+                evaluate_content TEXT DEFAULT '感谢您的购买，欢迎再次光临！',
+                auto_reply_review_enabled BOOLEAN DEFAULT FALSE,
+                reply_review_content TEXT DEFAULT '感谢支持！',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE,
+                UNIQUE(cookie_id)
             )
             ''')
 
@@ -6026,6 +6060,173 @@ class DBManager:
         except Exception as e:
             logger.error(f"检查黑名单失败: {e}")
             return False
+
+    def get_ai_conversations(self, cookie_id: str = None, chat_id: str = None, buyer_id: str = None,
+                             page: int = 1, page_size: int = 20) -> dict:
+        """获取AI对话历史"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                conditions = []
+                params = []
+                if cookie_id:
+                    conditions.append('cookie_id = ?')
+                    params.append(cookie_id)
+                if chat_id:
+                    conditions.append('chat_id = ?')
+                    params.append(chat_id)
+                if buyer_id:
+                    conditions.append('user_id = ?')
+                    params.append(buyer_id)
+                
+                where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+                
+                cursor.execute(f'SELECT COUNT(*) FROM ai_conversations {where}', params)
+                total = cursor.fetchone()[0]
+                
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM ai_conversations {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取AI对话历史失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def get_ai_conversation_chats(self, cookie_id: str = None) -> list:
+        """获取有对话的chat_id列表（用于筛选）"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                if cookie_id:
+                    cursor.execute('''
+                        SELECT DISTINCT chat_id, user_id, COUNT(*) as msg_count, 
+                               MAX(created_at) as last_msg
+                        FROM ai_conversations WHERE cookie_id = ?
+                        GROUP BY chat_id ORDER BY last_msg DESC LIMIT 50
+                    ''', (cookie_id,))
+                else:
+                    cursor.execute('''
+                        SELECT DISTINCT chat_id, user_id, COUNT(*) as msg_count,
+                               MAX(created_at) as last_msg
+                        FROM ai_conversations
+                        GROUP BY chat_id ORDER BY last_msg DESC LIMIT 50
+                    ''')
+                rows = cursor.fetchall()
+                columns = ['chat_id', 'buyer_id', 'msg_count', 'last_msg']
+                return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"获取对话列表失败: {e}")
+            return []
+
+    def get_evaluation_config(self, cookie_id: str) -> dict:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT * FROM evaluation_config WHERE cookie_id = ?', (cookie_id,))
+            row = cursor.fetchone()
+            if row:
+                columns = [d[0] for d in cursor.description]
+                return dict(zip(columns, row))
+            return {'auto_evaluate_enabled': False, 'evaluate_content': '感谢您的购买，欢迎再次光临！', 'auto_reply_review_enabled': False, 'reply_review_content': '感谢支持！'}
+
+    def update_evaluation_config(self, cookie_id: str, data: dict) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO evaluation_config (cookie_id, auto_evaluate_enabled, evaluate_content, auto_reply_review_enabled, reply_review_content)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(cookie_id) DO UPDATE SET
+                    auto_evaluate_enabled = excluded.auto_evaluate_enabled,
+                    evaluate_content = excluded.evaluate_content,
+                    auto_reply_review_enabled = excluded.auto_reply_review_enabled,
+                    reply_review_content = excluded.reply_review_content,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (cookie_id, data.get('auto_evaluate_enabled', False), data.get('evaluate_content', ''),
+                  data.get('auto_reply_review_enabled', False), data.get('reply_review_content', '')))
+            self.conn.commit()
+            return True
+
+    def get_item_schedules(self, cookie_id: str = None, schedule_type: str = None) -> list:
+        with self.lock:
+            cursor = self.conn.cursor()
+            conditions = []
+            params = []
+            if cookie_id:
+                conditions.append('cookie_id = ?')
+                params.append(cookie_id)
+            if schedule_type:
+                conditions.append('schedule_type = ?')
+                params.append(schedule_type)
+            where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+            cursor.execute(f'SELECT * FROM item_schedule {where} ORDER BY created_at DESC', params)
+            rows = cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+
+    def add_item_schedule(self, cookie_id: str, item_id: str, item_title: str,
+                          schedule_type: str, schedule_time: str = '', cron_expression: str = '') -> int:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO item_schedule (cookie_id, item_id, item_title, schedule_type, schedule_time, cron_expression)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (cookie_id, item_id, item_title, schedule_type, schedule_time, cron_expression))
+            self.conn.commit()
+            return cursor.lastrowid
+
+    def update_item_schedule(self, schedule_id: int, data: dict) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            fields = []
+            params = []
+            for key in ['schedule_time', 'cron_expression', 'enabled', 'schedule_type']:
+                if key in data:
+                    fields.append(f'{key} = ?')
+                    params.append(data[key])
+            if not fields:
+                return False
+            fields.append('updated_at = CURRENT_TIMESTAMP')
+            params.append(schedule_id)
+            cursor.execute(f"UPDATE item_schedule SET {', '.join(fields)} WHERE id = ?", params)
+            self.conn.commit()
+            return True
+
+    def delete_item_schedule(self, schedule_id: int) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('DELETE FROM item_schedule WHERE id = ?', (schedule_id,))
+            self.conn.commit()
+            return True
+
+    def get_pending_schedules(self) -> list:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                SELECT * FROM item_schedule
+                WHERE enabled = 1
+                AND schedule_time IS NOT NULL
+                AND schedule_time != ''
+                AND schedule_time <= datetime('now', 'localtime')
+                AND (last_run_at IS NULL OR last_run_at < schedule_time)
+            ''')
+            rows = cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+
+    def mark_schedule_run(self, schedule_id: int) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('UPDATE item_schedule SET last_run_at = CURRENT_TIMESTAMP WHERE id = ?', (schedule_id,))
+            self.conn.commit()
+            return True
 
     def cleanup_expired_sessions(self):
         with self.lock:
