@@ -489,6 +489,19 @@ class DBManager:
             ('item_sync_max_pages', '5', '每次最多同步的页数')
             ''')
 
+            # 创建用户会话表（持久化token）
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                is_admin BOOLEAN DEFAULT FALSE,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            ''')
+
             # 检查并升级数据库
             self.check_and_upgrade_db(cursor)
 
@@ -5728,6 +5741,44 @@ class DBManager:
             except Exception as e:
                 logger.error(f"获取订单列表失败: {e}")
                 return []
+
+
+    # ---- Session 持久化 ----
+    def save_session(self, token: str, user_id: int, username: str, is_admin: bool, expire_seconds: int = 86400):
+        with self.lock:
+            cursor = self.conn.cursor()
+            now = time.time()
+            cursor.execute(
+                'INSERT OR REPLACE INTO user_sessions (token, user_id, username, is_admin, created_at, expires_at) VALUES (?,?,?,?,?,?)',
+                (token, user_id, username, is_admin, now, now + expire_seconds)
+            )
+            self.conn.commit()
+
+    def get_session(self, token: str):
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT user_id, username, is_admin, created_at, expires_at FROM user_sessions WHERE token=?', (token,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            user_id, username, is_admin, created_at, expires_at = row
+            if time.time() > expires_at:
+                cursor.execute('DELETE FROM user_sessions WHERE token=?', (token,))
+                self.conn.commit()
+                return None
+            return {'user_id': user_id, 'username': username, 'is_admin': bool(is_admin), 'timestamp': created_at}
+
+    def delete_session(self, token: str):
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('DELETE FROM user_sessions WHERE token=?', (token,))
+            self.conn.commit()
+
+    def cleanup_expired_sessions(self):
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('DELETE FROM user_sessions WHERE expires_at<?', (time.time(),))
+            self.conn.commit()
 
 
 # 全局单例

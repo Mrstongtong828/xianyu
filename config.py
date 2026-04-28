@@ -1,5 +1,7 @@
 import os
+import sys
 import yaml
+from loguru import logger
 from typing import Dict, Any
 
 class Config:
@@ -19,17 +21,17 @@ class Config:
         return cls._instance
 
     def _load_config(self):
-        """加载配置文件
-        
-        从global_config.yml文件中加载配置信息。
-        如果文件不存在则抛出FileNotFoundError异常。
-        """
         config_path = os.path.join(os.path.dirname(__file__), 'global_config.yml')
         if not os.path.exists(config_path):
-            raise FileNotFoundError(f"配置文件不存在: {config_path}")
+            logger.error(f"未找到 global_config.yml，请检查配置文件是否正确生成（期望路径：{config_path}）")
+            sys.exit(1)
 
-        with open(config_path, 'r', encoding='utf-8') as f:
-            self._config = yaml.safe_load(f)
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                self._config = yaml.safe_load(f)
+        except FileNotFoundError:
+            logger.error(f"配置文件不存在，无法加载：{config_path}")
+            sys.exit(1)
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置项

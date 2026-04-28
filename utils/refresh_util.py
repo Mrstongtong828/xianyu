@@ -7,14 +7,11 @@ import hashlib
 import base64
 import struct
 import math
+import random
 from typing import Any, Dict, List
 import requests
 from loguru import logger
 import asyncio
-
-import time
-import random
-from loguru import logger
 from DrissionPage import Chromium, ChromiumOptions
 
 def log_captcha_event(cookie_id: str, event_type: str, success: bool = None, details: str = ""):

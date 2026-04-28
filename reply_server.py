@@ -33,8 +33,8 @@ from loguru import logger
 try:
     from api_captcha_remote import router as captcha_router
     CAPTCHA_ROUTER_AVAILABLE = True
-except ImportError:
-    logger.warning("⚠️ api_captcha_remote 未找到，刮刮乐远程控制功能不可用")
+except Exception as e:
+    logger.warning(f"api_captcha_remote 模块加载失败: {e}")
     CAPTCHA_ROUTER_AVAILABLE = False
 
 # 关键字文件路径
@@ -43,7 +43,7 @@ KEYWORDS_FILE = Path(__file__).parent / "回复关键字.txt"
 # 简单的用户认证配置
 ADMIN_USERNAME = "admin"
 DEFAULT_ADMIN_PASSWORD = "admin123"  # 系统初始化时的默认密码
-SESSION_TOKENS = {}  # 存储会话token: {token: {'user_id': int, 'username': str, 'timestamp': float}}
+SESSION_TOKENS = {}  # 保留兼容性，实际存储已迁移至SQLite user_sessions 表
 TOKEN_EXPIRE_TIME = 24 * 60 * 60  # token过期时间：24小时
 
 # HTTP Bearer认证
@@ -185,19 +185,8 @@ def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(s
     """验证token并返回用户信息"""
     if not credentials:
         return None
-
-    token = credentials.credentials
-    if token not in SESSION_TOKENS:
-        return None
-
-    token_data = SESSION_TOKENS[token]
-
-    # 检查token是否过期
-    if time.time() - token_data['timestamp'] > TOKEN_EXPIRE_TIME:
-        del SESSION_TOKENS[token]
-        return None
-
-    return token_data
+    from db_manager import db_manager
+    return db_manager.get_session(credentials.credentials)
 
 
 def verify_admin_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Dict[str, Any]:
@@ -207,7 +196,7 @@ def verify_admin_token(credentials: Optional[HTTPAuthorizationCredentials] = Dep
         raise HTTPException(status_code=401, detail="未授权访问")
 
     # 检查是否是管理员
-    if user_info['username'] != ADMIN_USERNAME:
+    if not user_info.get('is_admin'):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     return user_info
@@ -239,7 +228,7 @@ def get_user_log_prefix(user_info: Dict[str, Any] = None) -> str:
 
 def require_admin(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """要求管理员权限"""
-    if current_user['username'] != 'admin':
+    if not current_user.get('is_admin'):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     return current_user
 
@@ -368,8 +357,8 @@ if not os.path.exists(static_dir):
 app.mount('/static', StaticFiles(directory=static_dir), name='static')
 
 # 挂载 /assets 路径，指向 static/assets 目录
-# 这样访问 /assets/xxx.js 时会正确映射到 static_dir/assets/xxx.js
 assets_dir = os.path.join(static_dir, 'assets')
+os.makedirs(assets_dir, exist_ok=True)
 app.mount('/assets', StaticFiles(directory=assets_dir), name='assets')
 
 # 确保图片上传目录存在
@@ -511,12 +500,8 @@ async def login(request: LoginRequest):
             if user:
                 # 生成token
                 token = generate_token()
-                SESSION_TOKENS[token] = {
-                    'user_id': user['id'],
-                    'username': user['username'],
-                    'is_admin': user.get('is_admin', False) or user['username'] == ADMIN_USERNAME,
-                    'timestamp': time.time()
-                }
+                is_admin = user.get('is_admin', False) or user['username'] == ADMIN_USERNAME
+                db_manager.save_session(token, user['id'], user['username'], is_admin, TOKEN_EXPIRE_TIME)
 
                 # 区分管理员和普通用户的日志
                 if user['username'] == ADMIN_USERNAME:
@@ -547,12 +532,13 @@ async def login(request: LoginRequest):
         if user and db_manager.verify_user_password(user['username'], request.password):
             # 生成token
             token = generate_token()
-            SESSION_TOKENS[token] = {
-                'user_id': user['id'],
-                'username': user['username'],
-                'is_admin': user.get('is_admin', False) or user['username'] == ADMIN_USERNAME,
-                'timestamp': time.time()
-            }
+            db_manager.save_session(
+                token,
+                user['id'],
+                user['username'],
+                user.get('is_admin', False) or user['username'] == ADMIN_USERNAME,
+                TOKEN_EXPIRE_TIME
+            )
 
             logger.info(f"【{user['username']}#{user['id']}】邮箱登录成功")
 
@@ -594,12 +580,13 @@ async def login(request: LoginRequest):
 
         # 生成token
         token = generate_token()
-        SESSION_TOKENS[token] = {
-            'user_id': user['id'],
-            'username': user['username'],
-            'is_admin': user.get('is_admin', False) or user['username'] == ADMIN_USERNAME,
-            'timestamp': time.time()
-        }
+        db_manager.save_session(
+            token,
+            user['id'],
+            user['username'],
+            user.get('is_admin', False) or user['username'] == ADMIN_USERNAME,
+            TOKEN_EXPIRE_TIME
+        )
 
         logger.info(f"【{user['username']}#{user['id']}】验证码登录成功")
 
@@ -635,8 +622,9 @@ async def verify(user_info: Optional[Dict[str, Any]] = Depends(verify_token)):
 # 登出接口
 @app.post('/logout')
 async def logout(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    if credentials and credentials.credentials in SESSION_TOKENS:
-        del SESSION_TOKENS[credentials.credentials]
+    if credentials:
+        from db_manager import db_manager
+        db_manager.delete_session(credentials.credentials)
     return {"message": "已登出"}
 
 

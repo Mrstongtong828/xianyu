@@ -1,1 +1,14 @@
 ﻿myenv/
+venv/
+__pycache__/
+utils/__pycache__/
+browser_data/
+data/
+logs/
+trajectory_history/
+realtime.log
+persona.txt
+static/uploads/images/
+*.pyc
+.env
+*.db

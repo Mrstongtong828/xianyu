@@ -1180,41 +1180,43 @@ class XianyuSliderStealth:
             return t
     
     def _generate_physics_trajectory(self, distance: float):
-        """基于物理加速度模型生成轨迹 - 适中速度模式
-
-        优化策略：
-        1. 适中轨迹点（15-25步）：平衡速度和真实度
-        2. 持续加速：一气呵成，不减速
-        3. 确保超调100%以上：保证滑动到位
-        4. 无回退：单向滑动
-        5. 适中延迟：3-8ms（更接近人类操作）
-        """
+        """基于物理加速度模型生成轨迹 - 仿生三段式（加速→匀速→减速）"""
         trajectory = []
-        # 确保超调100%
-        target_distance = distance * random.uniform(2.0, 2.1)  # 超调100-110%
+        # 轻微超调 5-15%，避免滑不到位
+        target_distance = distance * random.uniform(1.05, 1.15)
 
-        # 适中步数（15-25步）
-        steps = random.randint(15, 25)
+        # 步数 35-55，更接近真人操作
+        steps = random.randint(35, 55)
+        acc_end = int(steps * 0.4)    # 前40%加速
+        dec_start = int(steps * 0.75) # 后25%减速
 
-        # 适中时间间隔（3-8ms）
-        base_delay = random.uniform(0.003, 0.008)
-
-        # 生成轨迹点 - 直线加速
+        y_offset = 0.0
         for i in range(steps):
             progress = (i + 1) / steps
 
-            # 计算当前位置（使用平方加速曲线，越来越快）
-            x = target_distance * (progress ** 1.5)  # 加速曲线
+            if i < acc_end:
+                # 加速段：二次曲线
+                seg = (i + 1) / acc_end
+                x = target_distance * 0.45 * (seg ** 2)
+                delay = random.uniform(0.008, 0.015)
+            elif i < dec_start:
+                # 匀速段：线性插值
+                seg = (i - acc_end + 1) / (dec_start - acc_end)
+                x = target_distance * (0.45 + 0.40 * seg)
+                delay = random.uniform(0.010, 0.018)
+            else:
+                # 减速段：缓入曲线
+                seg = (i - dec_start + 1) / (steps - dec_start)
+                x = target_distance * (0.85 + 0.15 * (1 - (1 - seg) ** 2))
+                delay = random.uniform(0.015, 0.030)
 
-            # 小幅Y轴抖动
-            y = random.uniform(0, 2)
+            # Y轴随机游走，模拟手抖
+            y_offset += random.uniform(-0.8, 0.8)
+            y_offset = max(-3.0, min(3.0, y_offset))
 
-            # 适中延迟
-            delay = base_delay * random.uniform(0.9, 1.1)
+            trajectory.append((x, y_offset, delay))
 
-            trajectory.append((x, y, delay))
-
-        logger.info(f"【{self.pure_user_id}】适中速度模式：{len(trajectory)}步，超调100%+")
+        logger.info(f"【{self.pure_user_id}】仿生三段式轨迹：{len(trajectory)}步，超调{(target_distance/distance - 1)*100:.0f}%")
         return trajectory
     
     def generate_human_trajectory(self, distance: float):
@@ -2161,7 +2163,7 @@ class XianyuSliderStealth:
             
             if found_failure:
                 logger.info(f"【{self.pure_user_id}】检测到验证失败关键词，验证失败")
-                return True
+                return True, None
             
             # 检查各种可能的验证失败提示元素
             failure_selectors = [

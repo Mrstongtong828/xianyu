@@ -23,6 +23,7 @@ import sys
 import aiohttp
 from collections import defaultdict
 from db_manager import db_manager
+from xianyu_agent_adapter import agent_get_reply
 
 # 滑块验证补丁已废弃，使用集成的 Playwright 登录方法
 # 不再需要猴子补丁，所有功能已集成到 XianyuSliderStealth 类中
@@ -3450,51 +3451,28 @@ class XianyuLive:
     async def get_ai_reply(self, send_user_name: str, send_user_id: str, send_message: str, item_id: str, chat_id: str):
         """获取AI回复"""
         try:
-            from ai_reply_engine import ai_reply_engine
-
-            # 检查是否启用AI回复
-            if not ai_reply_engine.is_ai_enabled(self.cookie_id):
-                logger.warning(f"账号 {self.cookie_id} 未启用AI回复")
-                return None
-
-            # 从数据库获取商品信息
-            from db_manager import db_manager
             item_info_raw = db_manager.get_item_info(self.cookie_id, item_id)
-
             if not item_info_raw:
-                logger.warning(f"数据库中无商品信息: {item_id}")
-                # 使用默认商品信息
-                item_info = {
-                    'title': '商品信息获取失败',
-                    'price': 0,
-                    'desc': '暂无商品描述'
-                }
+                item_info = {"title": "商品信息获取失败", "price": 0, "desc": "暂无商品描述"}
             else:
-                # 解析数据库中的商品信息
                 item_info = {
-                    'title': item_info_raw.get('item_title', '未知商品'),
-                    'price': self._parse_price(item_info_raw.get('item_price', '0')),
-                    'desc': item_info_raw.get('item_detail', '暂无商品描述')
+                    "title": item_info_raw.get("item_title", "未知商品"),
+                    "price": self._parse_price(item_info_raw.get("item_price", "0")),
+                    "desc":  item_info_raw.get("item_detail", "暂无商品描述"),
                 }
 
-            # 生成AI回复
-            # 由于外部已实现防抖机制，跳过内部等待（skip_wait=True）
-            reply = ai_reply_engine.generate_reply(
-                message=send_message,
+            reply = await agent_get_reply(
+                send_message=send_message,
                 item_info=item_info,
                 chat_id=chat_id,
                 cookie_id=self.cookie_id,
-                user_id=send_user_id,
-                item_id=item_id,
-                skip_wait=True  # 跳过内部等待，因为外部已实现防抖
             )
 
             if reply:
-                logger.info(f"【{self.cookie_id}】AI回复生成成功: {reply}")
-                return reply
+                logger.info(f"【{self.cookie_id}】Agent回复生成成功: {reply}")
             else:
-                logger.warning(f"AI回复生成失败")
-                return None
+                logger.info(f"【{self.cookie_id}】Agent判断无需回复")
+            return reply
 
         except Exception as e:
             logger.error(f"获取AI回复失败: {self._safe_str(e)}")
