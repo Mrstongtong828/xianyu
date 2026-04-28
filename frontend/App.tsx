@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Sidebar from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import AccountList from './components/AccountList';
-import OrderList from './components/OrderList';
-import CardList from './components/CardList';
-import ItemList from './components/ItemList';
-import Settings from './components/Settings';
-import Keywords from './components/Keywords';
 import { login, verifyToken } from './services/api';
-import { ShieldCheck, ArrowRight, Loader2, Sparkles, User, Lock, KeyRound } from 'lucide-react';
+import { ShieldCheck, ArrowRight, Loader2, User, Lock, KeyRound } from 'lucide-react';
+
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const AccountList = lazy(() => import('./components/AccountList'));
+const OrderList = lazy(() => import('./components/OrderList'));
+const CardList = lazy(() => import('./components/CardList'));
+const ItemList = lazy(() => import('./components/ItemList'));
+const Settings = lazy(() => import('./components/Settings'));
+const Keywords = lazy(() => import('./components/Keywords'));
+
+const PageFallback = () => (
+  <div className="flex items-center justify-center py-20">
+    <Loader2 className="w-8 h-8 text-[#FFE815] animate-spin" />
+  </div>
+);
 
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -19,7 +26,6 @@ const App: React.FC = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Check auth on mount
   useEffect(() => {
       const token = localStorage.getItem('auth_token');
       if (token) {
@@ -73,17 +79,14 @@ const App: React.FC = () => {
       );
   }
 
-  // Login Screen Component
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F4F5F7] p-4 relative overflow-hidden font-sans">
-        {/* Animated Background Blobs */}
         <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-yellow-200/40 rounded-full blur-[120px] animate-pulse"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-blue-200/30 rounded-full blur-[120px] animate-pulse" style={{animationDelay: '2s'}}></div>
 
         <div className="bg-white/80 backdrop-blur-3xl p-8 md:p-12 rounded-[3rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] w-full max-w-lg border border-white relative z-10 animate-fade-in">
           
-          {/* Header with Logo */}
           <div className="text-center mb-10">
              <div className="w-24 h-24 bg-[#FFE815] rounded-[2rem] flex items-center justify-center shadow-xl shadow-yellow-200 mx-auto mb-6 transform rotate-[-6deg] hover:rotate-0 transition-all duration-500 cursor-pointer group">
                 <span className="text-black font-extrabold text-5xl group-hover:scale-110 transition-transform">闲</span>
@@ -152,18 +155,20 @@ const App: React.FC = () => {
     );
   }
 
-  // Main App Layout
   const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard': return <Dashboard />;
-      case 'accounts': return <AccountList />;
-      case 'orders': return <OrderList />;
-      case 'cards': return <CardList />;
-      case 'items': return <ItemList />;
-      case 'keywords': return <Keywords />;
-      case 'settings': return <Settings />;
-      default: return <Dashboard />;
-    }
+    const content = (() => {
+      switch (activeTab) {
+        case 'dashboard': return <Dashboard />;
+        case 'accounts': return <AccountList />;
+        case 'orders': return <OrderList />;
+        case 'cards': return <CardList />;
+        case 'items': return <ItemList />;
+        case 'keywords': return <Keywords />;
+        case 'settings': return <Settings />;
+        default: return <Dashboard />;
+      }
+    })();
+    return <Suspense fallback={<PageFallback />}>{content}</Suspense>;
   };
 
   return (
@@ -178,7 +183,6 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 ml-64 p-8 md:p-12 overflow-y-auto h-screen relative scroll-smooth">
-        {/* Subtle background decoration */}
         <div className="fixed top-0 right-0 w-[800px] h-[800px] bg-gradient-to-bl from-yellow-50 to-transparent rounded-full blur-[120px] pointer-events-none -z-10 opacity-60"></div>
         
         <div className="max-w-[1400px] mx-auto pb-10">

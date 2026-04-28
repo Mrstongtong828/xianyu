@@ -69,6 +69,11 @@ class DBManager:
         try:
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             cursor = self.conn.cursor()
+
+            cursor.execute('PRAGMA journal_mode=WAL;')
+            cursor.execute('PRAGMA synchronous=NORMAL;')
+            cursor.execute('PRAGMA cache_size=-8000;')
+            cursor.execute('PRAGMA busy_timeout=5000;')
             
             # 创建用户表
             cursor.execute('''
@@ -508,6 +513,8 @@ class DBManager:
             # 执行数据库迁移
             self._migrate_database(cursor)
 
+            self._create_indexes(cursor)
+
             self.conn.commit()
             logger.info("数据库初始化完成")
         except Exception as e:
@@ -561,8 +568,24 @@ class DBManager:
 
         except Exception as e:
             logger.error(f"数据库迁移失败: {e}")
-            # 迁移失败不应该阻止程序启动
             pass
+
+    def _create_indexes(self, cursor):
+        """创建缺失的性能索引"""
+        try:
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_cookie_id ON orders(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_buyer_id ON orders(buyer_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_conv_cookie_chat ON ai_conversations(cookie_id, chat_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_conv_created ON ai_conversations(created_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_email_ver_email ON email_verifications(email)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_control_cookie ON risk_control_logs(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_keywords_cookie ON keywords(cookie_id, id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_default_reply_records_cookie ON default_reply_records(cookie_id)')
+            logger.info("数据库索引创建/检查完成")
+        except Exception as e:
+            logger.warning(f"创建索引时出现警告: {e}")
 
     def _update_cards_table_constraints(self, cursor):
         """更新cards表的CHECK约束以支持image类型"""

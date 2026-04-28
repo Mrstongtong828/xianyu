@@ -93,6 +93,24 @@ class AutoReplyPauseManager:
 
         return remaining
 
+    def resume_chat(self, chat_id: str) -> bool:
+        """立即恢复指定chat_id的自动回复"""
+        if chat_id in self.paused_chats:
+            del self.paused_chats[chat_id]
+            return True
+        return False
+
+    def resume_all(self) -> int:
+        """恢复所有暂停的对话，返回恢复数量"""
+        count = len(self.paused_chats)
+        self.paused_chats.clear()
+        return count
+
+    def get_paused_chats(self) -> list:
+        """获取所有暂停中的chat_id列表"""
+        self.cleanup_expired_pauses()
+        return list(self.paused_chats.keys())
+
     def cleanup_expired_pauses(self):
         """清理已过期的暂停记录"""
         current_time = time.time()
@@ -990,6 +1008,42 @@ class XianyuLive:
 
         return False
 
+    def _extract_image_url_from_message(self, message_10: dict):
+        """从消息中提取图片 URL，支持多种消息格式"""
+        if not isinstance(message_10, dict):
+            return None
+        try:
+            for field_key in ('reminderContent', 'content', 'image'):
+                raw = message_10.get(field_key, '')
+                if isinstance(raw, str) and raw.strip():
+                    try:
+                        parsed = json.loads(raw)
+                        if isinstance(parsed, dict) and parsed.get('contentType') == 2:
+                            pics = parsed.get('image', {}).get('pics', [])
+                            if pics and isinstance(pics, list):
+                                url = pics[0].get('url', '')
+                                if url:
+                                    return url
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+            image_obj = message_10.get('image')
+            if isinstance(image_obj, dict):
+                pics = image_obj.get('pics', [])
+                if pics and isinstance(pics, list):
+                    url = pics[0].get('url', '')
+                    if url:
+                        return url
+
+            for key in ('picUrl', 'imageUrl', 'imgUrl', 'url'):
+                val = message_10.get(key, '')
+                if isinstance(val, str) and val.startswith('http'):
+                    return val
+
+        except Exception:
+            pass
+        return None
+
     def _extract_order_id(self, message: dict) -> str:
         """从消息中提取订单ID"""
         try:
@@ -1430,53 +1484,7 @@ class XianyuLive:
 
             # 打印所有请求参数（用于调试）
             api_url = API_ENDPOINTS.get('token')
-            logger.info(f"【{self.cookie_id}】========== Token刷新API调用详情 ==========")
-            logger.info(f"【{self.cookie_id}】API端点: {api_url}")
-            logger.info(f"【{self.cookie_id}】请求方法: POST")
-            logger.info(f"【{self.cookie_id}】")
-            logger.info(f"【{self.cookie_id}】--- URL参数 (params) ---")
-            for key, value in sorted(params.items()):
-                # 对于敏感信息，只显示部分
-                if key == 'sign':
-                    logger.info(f"【{self.cookie_id}】  {key}: {value[:20]}...{value[-10:] if len(value) > 30 else value} (长度: {len(value)})")
-                else:
-                    logger.info(f"【{self.cookie_id}】  {key}: {value}")
-            logger.info(f"【{self.cookie_id}】")
-            logger.info(f"【{self.cookie_id}】--- 请求体 (data) ---")
-            logger.info(f"【{self.cookie_id}】  data: {data_val}")
-            logger.info(f"【{self.cookie_id}】")
-            logger.info(f"【{self.cookie_id}】--- 签名计算信息 ---")
-            logger.info(f"【{self.cookie_id}】  token (从_m_h5_tk提取): {token[:20]}...{token[-10:] if len(token) > 30 else token} (长度: {len(token)})")
-            logger.info(f"【{self.cookie_id}】  timestamp (t): {params['t']}")
-            logger.info(f"【{self.cookie_id}】  app_key: 34839810")
-            logger.info(f"【{self.cookie_id}】  data_val: {data_val}")
-            logger.info(f"【{self.cookie_id}】  计算签名: MD5({token}&{params['t']}&34839810&{data_val})")
-            logger.info(f"【{self.cookie_id}】  最终签名: {sign}")
-            logger.info(f"【{self.cookie_id}】")
-            logger.info(f"【{self.cookie_id}】--- 请求头 (headers) ---")
-            for key, value in sorted(headers.items()):
-                if key == 'cookie':
-                    # Cookie很长，只显示关键信息
-                    cookie_dict = trans_cookies(self.cookies_str)
-                    logger.info(f"【{self.cookie_id}】  {key}: [Cookie字符串，长度: {len(value)}]")
-                    logger.info(f"【{self.cookie_id}】    Cookie字段数: {len(cookie_dict)}")
-                    logger.info(f"【{self.cookie_id}】    关键字段:")
-                    important_keys = ['unb', '_m_h5_tk', '_m_h5_tk_enc', 'cookie2', 't', 'sgcookie']
-                    for k in important_keys:
-                        if k in cookie_dict:
-                            val = cookie_dict[k]
-                            if len(val) > 50:
-                                logger.info(f"【{self.cookie_id}】      {k}: {val[:30]}...{val[-20:]} (长度: {len(val)})")
-                            else:
-                                logger.info(f"【{self.cookie_id}】      {k}: {val}")
-                else:
-                    logger.info(f"【{self.cookie_id}】  {key}: {value}")
-            logger.info(f"【{self.cookie_id}】")
-            logger.info(f"【{self.cookie_id}】--- 其他信息 ---")
-            logger.info(f"【{self.cookie_id}】  device_id: {self.device_id}")
-            logger.info(f"【{self.cookie_id}】  myid (unb): {self.myid}")
-            logger.info(f"【{self.cookie_id}】  完整Cookie字符串长度: {len(self.cookies_str)}")
-            logger.info(f"【{self.cookie_id}】==========================================")
+            logger.info(f"【{self.cookie_id}】正在刷新token... (API: {api_url}, cookie长度: {len(self.cookies_str)})")
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -1486,14 +1494,8 @@ class XianyuLive:
                     headers=headers,
                     timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:
-                    # 打印响应信息
-                    logger.info(f"【{self.cookie_id}】--- API响应信息 ---")
-                    logger.info(f"【{self.cookie_id}】  状态码: {response.status}")
-                    logger.info(f"【{self.cookie_id}】  响应头: {dict(response.headers)}")
-                    
                     res_json = await response.json()
-                    logger.info(f"【{self.cookie_id}】  响应内容: {json.dumps(res_json, ensure_ascii=False, indent=2)}")
-                    logger.info(f"【{self.cookie_id}】================================")
+                    logger.debug(f"【{self.cookie_id}】Token刷新响应: 状态码={response.status}, 内容={json.dumps(res_json, ensure_ascii=False)[:500]}")
 
                     # 检查并更新Cookie
                     if 'set-cookie' in response.headers:
@@ -2436,16 +2438,11 @@ class XianyuLive:
                 # 如果我们等待它完成，会导致 CancelledError 中断等待
                 # 正确的做法是：触发重启后立即返回，让任务自然退出
                 
-                import threading
-                
-                def trigger_restart():
-                    """在后台线程中触发重启，不阻塞当前任务"""
+                import asyncio as _asyncio_mod
+
+                async def trigger_restart():
+                    await _asyncio_mod.sleep(0.5)
                     try:
-                        # 给当前任务一点时间完成清理（避免竞态条件）
-                        import time
-                        time.sleep(0.5)
-                        
-                        # save_to_db=False 因为 update_config_cookies 已经保存过了
                         cookie_manager.update_cookie(self.cookie_id, self.cookies_str, save_to_db=False)
                         logger.info(f"【{self.cookie_id}】实例重启请求已触发")
                     except Exception as e:
@@ -2453,9 +2450,7 @@ class XianyuLive:
                         import traceback
                         logger.error(f"【{self.cookie_id}】重启失败详情:\n{traceback.format_exc()}")
 
-                # 在后台线程中触发重启
-                restart_thread = threading.Thread(target=trigger_restart, daemon=True)
-                restart_thread.start()
+                _task = asyncio.create_task(trigger_restart())
                 
                 logger.info(f"【{self.cookie_id}】实例重启已触发，当前任务即将退出...")
                 logger.warning(f"【{self.cookie_id}】注意：重启请求已发送，CookieManager将在0.5秒后取消当前任务并启动新实例")
@@ -3605,6 +3600,78 @@ class XianyuLive:
             logger.error(f"📱 处理消息通知失败: {self._safe_str(e)}")
             import traceback
             logger.error(f"📱 详细错误信息: {traceback.format_exc()}")
+
+    async def send_image_to_manual_notification(self, send_user_name: str, send_user_id: str, ocr_text: str, image_url: str, item_id: str = None, chat_id: str = None):
+        """买家发图片时发送转人工通知"""
+        try:
+            from db_manager import db_manager
+            import hashlib
+
+            notification_key = hashlib.md5(f"image_{chat_id}_{send_user_id}_{image_url[-50:]}".encode()).hexdigest()
+
+            async with self.notification_lock:
+                current_time = time.time()
+                if notification_key in self.last_notification_time:
+                    if current_time - self.last_notification_time[notification_key] < self.notification_cooldown:
+                        logger.warning(f"📱 图片转人工通知在冷却期内，跳过")
+                        return
+                self.last_notification_time[notification_key] = current_time
+
+                expired_keys = [k for k, t in self.last_notification_time.items() if current_time - t > 3600]
+                for k in expired_keys:
+                    del self.last_notification_time[k]
+
+            notifications = db_manager.get_account_notifications(self.cookie_id)
+            if not notifications:
+                logger.warning(f"📱 账号 {self.cookie_id} 未配置通知渠道，跳过图片转人工通知")
+                return
+
+            user_url = f"https://www.goofish.com/personal?userId={send_user_id}"
+            notification_msg = (
+                f"🖼 图片消息 - 请转人工处理\n\n"
+                f"账号ID: {self.cookie_id}\n"
+                f"买家: {send_user_name}\n"
+                f"买家ID: {send_user_id}\n"
+                f"买家链接: {user_url}\n"
+                f"商品ID: {item_id or '未知'}\n"
+                f"OCR识别: {ocr_text or '未识别出文字'}\n"
+                f"图片链接: {image_url[:200]}\n"
+                f"时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                f"机器人自动回复已暂停，处理完毕后发送:\n"
+                f"  「恢复全部」- 恢复所有对话\n"
+                f"  「状态」- 查看当前暂停状态"
+            )
+
+            logger.info(f"📱 发送图片转人工通知 - 账号: {self.cookie_id}, 买家: {send_user_name}")
+
+            for notification in notifications:
+                if not notification.get('enabled', True):
+                    continue
+                try:
+                    config_data = self._parse_notification_config(notification.get('channel_config'))
+                    channel_type = notification.get('channel_type')
+
+                    if channel_type in ('feishu', 'lark'):
+                        await self._send_feishu_notification(config_data, notification_msg)
+                        logger.info(f"✅ 图片转人工通知已发送到飞书")
+                    elif channel_type in ('ding_talk', 'dingtalk'):
+                        await self._send_dingtalk_notification(config_data, notification_msg)
+                    elif channel_type == 'email':
+                        await self._send_email_notification(config_data, notification_msg)
+                    elif channel_type == 'webhook':
+                        await self._send_webhook_notification(config_data, notification_msg)
+                    elif channel_type == 'wechat':
+                        await self._send_wechat_notification(config_data, notification_msg)
+                    elif channel_type == 'telegram':
+                        await self._send_telegram_notification(config_data, notification_msg)
+                    elif channel_type == 'bark':
+                        await self._send_bark_notification(config_data, notification_msg)
+
+                except Exception as e:
+                    logger.error(f"📱 图片转人工通知发送失败: {self._safe_str(e)}")
+
+        except Exception as e:
+            logger.error(f"📱 图片转人工通知异常: {self._safe_str(e)}")
 
     def _parse_notification_config(self, config: str) -> dict:
         """解析通知配置数据"""
@@ -6916,16 +6983,23 @@ class XianyuLive:
                 pass
 
     def is_chat_message(self, message):
-        """判断是否为用户聊天消息"""
+        """判断是否为用户聊天消息（支持文本和图片消息）"""
         try:
-            return (
-                isinstance(message, dict)
-                and "1" in message
-                and isinstance(message["1"], dict)
-                and "10" in message["1"]
-                and isinstance(message["1"]["10"], dict)
-                and "reminderContent" in message["1"]["10"]
-            )
+            if not (isinstance(message, dict) and "1" in message and isinstance(message["1"], dict)):
+                return False
+            msg_content = message["1"].get("10", None)
+            if isinstance(msg_content, dict):
+                if "reminderContent" in msg_content or "image" in msg_content or "content" in msg_content:
+                    return True
+            if isinstance(msg_content, str):
+                try:
+                    parsed = json.loads(msg_content)
+                    if isinstance(parsed, dict):
+                        if parsed.get("contentType") in (1, 2):
+                            return True
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return False
         except Exception:
             return False
 
@@ -7644,9 +7718,40 @@ class XianyuLive:
                 send_user_name = message_10.get("senderNick", message_10.get("reminderTitle", "未知用户"))
                 send_user_id = message_10.get("senderUserId", "unknown")
                 send_message = message_10.get("reminderContent", "")
+                is_image_msg = False
+                image_ocr_text = None
+                image_url = ""
+
+                if not send_message:
+                    image_url = self._extract_image_url_from_message(message_10)
+                    if image_url:
+                        is_image_msg = True
+                        logger.info(f"【{self.cookie_id}】检测到买家图片消息: {image_url[:100]}")
+                        from utils.ocr_engine import ocr_from_url_async, is_available as ocr_available
+                        if ocr_available():
+                            try:
+                                image_ocr_text = await ocr_from_url_async(image_url)
+                                if image_ocr_text:
+                                    logger.info(f"【{self.cookie_id}】OCR 识别结果: {image_ocr_text[:200]}")
+                                    send_message = image_ocr_text
+                                else:
+                                    logger.info(f"【{self.cookie_id}】OCR 识别无文字内容")
+                            except Exception as e:
+                                logger.error(f"【{self.cookie_id}】OCR 识别异常: {self._safe_str(e)}")
+                        else:
+                            logger.info(f"【{self.cookie_id}】OCR 引擎不可用，跳过图片识别")
 
                 chat_id_raw = message_1.get("2", "")
                 chat_id = chat_id_raw.split('@')[0] if '@' in str(chat_id_raw) else str(chat_id_raw)
+
+                if is_image_msg:
+                    await self.send_image_to_manual_notification(
+                        send_user_name, send_user_id,
+                        image_ocr_text or '(未识别出文字)',
+                        image_url, item_id, chat_id
+                    )
+                    pause_manager.pause_chat(chat_id, self.cookie_id)
+                    logger.info(f"【{self.cookie_id}】图片消息已暂停 chat_id={chat_id} 的自动回复")
 
             except Exception as e:
                 logger.error(f"提取聊天消息信息失败: {self._safe_str(e)}")
@@ -7666,7 +7771,10 @@ class XianyuLive:
 
                 return
             else:
-                logger.info(f"[{msg_time}] 【收到】用户: {send_user_name} (ID: {send_user_id}), 商品({item_id}): {send_message}")
+                if is_image_msg:
+                    logger.info(f"[{msg_time}] 【收到图片-OCR】用户: {send_user_name} (ID: {send_user_id}), 商品({item_id}): {send_message}")
+                    logger.info(f"[{msg_time}] 【图片消息-转人工】已发送通知，跳过自动回复")
+                    return
 
                 # 🔔 立即发送消息通知（独立于自动回复功能）
                 # 检查是否为群组消息，如果是群组消息则跳过通知

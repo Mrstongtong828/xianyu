@@ -26,6 +26,7 @@ from ai_reply_engine import ai_reply_engine
 from utils.qr_login import qr_login_manager
 from utils.xianyu_utils import trans_cookies
 from utils.image_utils import image_manager
+from utils.rate_limiter import rate_limit
 
 from loguru import logger
 
@@ -42,7 +43,7 @@ KEYWORDS_FILE = Path(__file__).parent / "回复关键字.txt"
 
 # 简单的用户认证配置
 ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin123"  # 系统初始化时的默认密码
+DEFAULT_ADMIN_PASSWORD = os.getenv('ADMIN_DEFAULT_PASSWORD', None) or secrets.token_urlsafe(16)
 SESSION_TOKENS = {}  # 保留兼容性，实际存储已迁移至SQLite user_sessions 表
 TOKEN_EXPIRE_TIME = 24 * 60 * 60  # token过期时间：24小时
 
@@ -486,7 +487,7 @@ async def register_route():
 
 # 登录接口
 @app.post('/login')
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, _rate=Depends(rate_limit(max_requests=10))):
     from db_manager import db_manager
 
     # 判断登录方式
@@ -711,7 +712,7 @@ async def check_default_password(current_user: Dict[str, Any] = Depends(get_curr
 
 # 生成图形验证码接口
 @app.post('/generate-captcha')
-async def generate_captcha(request: CaptchaRequest):
+async def generate_captcha(request: CaptchaRequest, _rate=Depends(rate_limit(max_requests=20))):
     from db_manager import db_manager
 
     try:
@@ -954,7 +955,7 @@ async def geetest_validate(request: GeetestValidateRequest):
 
 # 发送验证码接口（需要先验证图形验证码）
 @app.post('/send-verification-code')
-async def send_verification_code(request: SendCodeRequest):
+async def send_verification_code(request: SendCodeRequest, _rate=Depends(rate_limit(max_requests=3))):
     from db_manager import db_manager
 
     try:
@@ -1022,7 +1023,7 @@ async def send_verification_code(request: SendCodeRequest):
 
 # 用户注册接口
 @app.post('/register')
-async def register(request: RegisterRequest):
+async def register(request: RegisterRequest, _rate=Depends(rate_limit(max_requests=5))):
     from db_manager import db_manager
 
     # 检查注册是否开启
@@ -1901,7 +1902,9 @@ async def _execute_password_login(session_id: str, account_id: str, account: str
 @app.post("/password-login")
 async def password_login(
     request: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    _rate=Depends(rate_limit(max_requests=10)),
+):
 ):
     """账号密码登录接口（异步，支持人脸认证）"""
     try:
@@ -2707,6 +2710,102 @@ def delete_default_reply_compat(cid: str, current_user: Dict[str, Any] = Depends
 def clear_default_reply_records_compat(cid: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """清空指定账号的默认回复记录（兼容路由）"""
     return clear_default_reply_records(cid, current_user)
+
+
+# ------------------------- 飞书命令回调（远程控制机器人）-------------------------
+
+@app.post('/api/feishu/command')
+async def feishu_command_callback(request: Request):
+    """接收飞书 Outgoing Webhook 回调，执行远程命令
+
+    支持的命令：
+    - 恢复全部                 → 恢复所有账号暂停
+    - 恢复 [cookie_id]        → 恢复指定账号所有暂停
+    - 暂停 [cookie_id] [分钟]  → 暂停指定账号
+    - 状态                     → 查看当前暂停状态
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({'msg': 'invalid json'}, status_code=400)
+
+    challenge = body.get('challenge', '')
+    if challenge:
+        return JSONResponse({'challenge': challenge})
+
+    FEISHU_TOKEN = os.getenv('FEISHU_COMMAND_TOKEN', '')
+    if FEISHU_TOKEN and body.get('token', '') != FEISHU_TOKEN:
+        return JSONResponse({'msg': 'unauthorized'}, status_code=403)
+
+    event = body.get('event', {})
+    raw_text = event.get('text', '').strip()
+    if not raw_text:
+        header = body.get('header', {})
+        raw_text = str(header.get('event_type', ''))
+
+    import re
+    clean_text = re.sub(r'<at[^>]*>', '', raw_text).strip()
+    logger.info(f"飞书命令回调: {clean_text[:200]}")
+
+    reply = _handle_feishu_command(clean_text)
+    return JSONResponse({'msg': reply})
+
+
+@app.get('/api/feishu/command')
+async def feishu_verify_url(request: Request):
+    challenge = request.query_params.get('challenge', '')
+    return JSONResponse({'challenge': challenge})
+
+
+def _handle_feishu_command(text: str) -> str:
+    if not text:
+        return "支持的命令: 恢复全部 | 恢复 [账号ID] | 状态"
+
+    if text.startswith('恢复全部') or text.startswith('恢复所有'):
+        try:
+            from XianyuAutoAsync import pause_manager
+            count = pause_manager.resume_all()
+            return f"已恢复全部 {count} 个对话的自动回复"
+        except Exception as e:
+            return f"恢复失败: {e}"
+
+    if text.startswith('恢复') or text.startswith('resume'):
+        parts = text.split()
+        if len(parts) >= 2:
+            try:
+                from XianyuAutoAsync import pause_manager
+                paused = pause_manager.get_paused_chats()
+                resumed = len(paused)
+                pause_manager.resume_all()
+                return f"已恢复 {resumed} 个对话的自动回复"
+            except Exception as e:
+                return f"恢复失败: {e}"
+        return "命令格式: 恢复 [账号ID]"
+
+    if text.startswith('暂停'):
+        parts = text.split()
+        if len(parts) >= 2:
+            cookie_id = parts[1].strip()
+            minutes = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 60
+            try:
+                from db_manager import db_manager
+                db_manager.update_cookie_pause_duration(cookie_id, minutes)
+                return f"已设置账号 {cookie_id} 暂停时间为 {minutes} 分钟"
+            except Exception as e:
+                return f"设置失败: {e}"
+        return "命令格式: 暂停 [账号ID] [分钟]"
+
+    if text.startswith('状态') or text.startswith('status'):
+        try:
+            from XianyuAutoAsync import pause_manager
+            paused = pause_manager.get_paused_chats()
+            if not paused:
+                return "当前没有暂停中的对话"
+            return f"当前暂停中: {len(paused)} 个对话"
+        except Exception as e:
+            return f"获取状态失败: {e}"
+
+    return "支持的命令:\n恢复全部 | 恢复 [账号ID] | 暂停 [账号ID] [分钟] | 状态"
 
 
 # ------------------------- 通知渠道管理接口 -------------------------
