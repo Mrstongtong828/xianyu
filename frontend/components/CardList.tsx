@@ -200,8 +200,8 @@ const CardList: React.FC = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">卡密库存</h2>
-          <p className="text-gray-500 mt-2 text-sm">管理自动发货的卡密、链接或图片资源。</p>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">卡密库存</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">管理自动发货的卡密、链接或图片资源。</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -227,7 +227,7 @@ const CardList: React.FC = () => {
 
       <div className="ios-card rounded-[2rem] overflow-hidden shadow-lg border-0 bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[800px] md:min-w-0">
             <thead>
               <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
                 <th className="px-8 py-5 w-[15%]">卡密名称</th>

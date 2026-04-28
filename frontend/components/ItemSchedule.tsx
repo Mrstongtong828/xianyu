@@ -115,8 +115,8 @@ const ItemSchedule: React.FC = () => {
     <div className="space-y-8 animate-fade-in">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">智能上下架计划</h2>
-          <p className="text-gray-500 mt-2 text-sm">定时自动上架或下架商品，按计划时间执行。</p>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">智能上下架计划</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">定时自动上架或下架商品，按计划时间执行。</p>
         </div>
         <div className="flex gap-3">
           <button
@@ -154,7 +154,7 @@ const ItemSchedule: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[900px] md:min-w-0">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="text-left px-5 py-5 text-sm font-bold text-gray-600">账号</th>

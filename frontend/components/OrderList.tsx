@@ -308,8 +308,8 @@ const OrderList: React.FC = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
         <div>
-          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">订单中心</h2>
-          <p className="text-gray-500 mt-2 font-medium">查看所有闲鱼交易记录与状态。</p>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">订单中心</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">查看所有闲鱼交易记录与状态。</p>
         </div>
         <div className="flex items-center gap-3">
             <button onClick={loadOrders} className="p-3 rounded-2xl bg-white border border-gray-100 text-gray-600 hover:bg-gray-50 hover:text-black transition-colors shadow-sm">
@@ -363,7 +363,7 @@ const OrderList: React.FC = () => {
 
         {/* Table */}
         <div className="overflow-x-auto min-h-[400px]">
-          <table className="w-full text-left border-collapse table-fixed">
+          <table className="w-full text-left border-collapse table-fixed min-w-[800px] md:min-w-0">
             <thead>
               <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
                 <th className="px-6 py-5" style={{width: '28%'}}>订单信息</th>

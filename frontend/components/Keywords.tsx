@@ -334,8 +334,8 @@ const Keywords: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">关键词管理</h2>
-          <p className="text-gray-500 mt-2 font-medium">配置自动回复和关键词发货规则</p>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">关键词管理</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">配置自动回复和关键词发货规则</p>
         </div>
       </div>
 

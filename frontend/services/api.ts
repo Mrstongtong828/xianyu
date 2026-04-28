@@ -4,7 +4,7 @@ import {
   AdminStats, Card, SystemSettings, ApiResponse, OrderAnalytics,
   Item, AIReplySettings, ShippingRule, ReplyRule, DefaultReply,
   BlacklistEntry, DeliveryRetryEntry, EvaluationConfig, ItemSchedule,
-  AIConversation, AIChatSummary
+  AIConversation, AIChatSummary, OperationLog
 } from '../types';
 
 // Auth
@@ -558,4 +558,27 @@ export const updateItemSchedule = async (scheduleId: number, data: Partial<ItemS
 };
 export const deleteItemSchedule = async (scheduleId: number): Promise<ApiResponse> => {
   return del(`/api/item-schedules/${scheduleId}`);
+};
+
+// Operation Logs
+export const getOperationLogs = async (params?: { cookie_id?: string; log_type?: string; page?: number; page_size?: number }): Promise<{ success: boolean; data: OperationLog[]; total: number; page: number; page_size: number }> => {
+  const sp = new URLSearchParams();
+  if (params?.cookie_id) sp.append('cookie_id', params.cookie_id);
+  if (params?.log_type) sp.append('log_type', params.log_type);
+  if (params?.page) sp.append('page', String(params.page));
+  if (params?.page_size) sp.append('page_size', String(params.page_size));
+  return get(`/api/operation-logs?${sp.toString()}`);
+};
+
+// Daily Quota
+export const getDailyQuota = async (cookieId: string): Promise<{ success: boolean; quota: { auto_reply_count: number; auto_delivery_count: number; date: string }; config: { daily_reply_limit: number; daily_delivery_limit: number } }> => {
+  return get(`/api/daily-quota/${cookieId}`);
+};
+
+export const getQuotaConfig = async (): Promise<{ success: boolean; config: { daily_reply_limit: number; daily_delivery_limit: number } }> => {
+  return get('/api/quota-config');
+};
+
+export const updateQuotaConfig = async (data: { daily_reply_limit?: number; daily_delivery_limit?: number }): Promise<ApiResponse> => {
+  return put('/api/quota-config', data);
 };

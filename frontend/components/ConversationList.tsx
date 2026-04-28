@@ -115,13 +115,13 @@ const ConversationList: React.FC = () => {
   return (
     <div className="space-y-4 animate-fade-in">
       <div>
-        <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">对话记录</h2>
-        <p className="text-gray-500 mt-2 font-medium">查看AI与买家的历史对话详情。</p>
+        <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">对话记录</h2>
+        <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">查看AI与买家的历史对话详情。</p>
       </div>
 
-      <div className="ios-card rounded-[2rem] overflow-hidden shadow-lg border-0 bg-white flex" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
+      <div className="ios-card rounded-[2rem] overflow-hidden shadow-lg border-0 bg-white dark:bg-gray-900 flex flex-col md:flex-row" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
         {/* Left Sidebar - Chat List */}
-        <div className="w-80 flex-shrink-0 border-r border-gray-100 flex flex-col bg-[#FAFAFA]">
+        <div className="w-full md:w-80 flex-shrink-0 border-r border-gray-100 dark:border-gray-800 flex flex-col bg-[#FAFAFA] dark:bg-gray-950 max-h-[40vh] md:max-h-none md:h-full">
           <div className="p-4 border-b border-gray-100">
             <div className="relative group">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#FFE815] transition-colors" />

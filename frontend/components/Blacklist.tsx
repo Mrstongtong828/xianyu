@@ -65,8 +65,8 @@ const Blacklist: React.FC = () => {
     <div className="space-y-8 animate-fade-in">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">买家黑名单</h2>
-          <p className="text-gray-500 mt-2 font-medium">管理被拉黑的买家，被拉黑的买家消息将被自动忽略</p>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">买家黑名单</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">管理被拉黑的买家，被拉黑的买家消息将被自动忽略</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -104,7 +104,7 @@ const Blacklist: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[800px] md:min-w-0">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="text-left px-6 py-5 text-sm font-bold text-gray-600">买家ID</th>

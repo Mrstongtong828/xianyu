@@ -7476,6 +7476,49 @@ async def update_evaluation_config(cookie_id: str, data: Dict[str, Any], current
         return {"success": True, "message": "配置已更新"}
     raise HTTPException(status_code=500, detail="更新失败")
 
+# ==================== 操作日志 API ====================
+
+@app.get("/api/operation-logs")
+async def get_operation_logs(
+    cookie_id: Optional[str] = None,
+    log_type: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取操作日志"""
+    result = db_manager.get_operation_logs(
+        cookie_id=cookie_id, log_type=log_type,
+        page=page, page_size=page_size
+    )
+    return {"success": True, **result}
+
+# ==================== 每日配额 API ====================
+
+@app.get("/api/daily-quota/{cookie_id}")
+async def get_daily_quota(cookie_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    quota = db_manager.get_daily_quota(cookie_id)
+    config = db_manager.get_quota_config()
+    return {"success": True, "quota": quota, "config": config}
+
+@app.get("/api/quota-config")
+async def get_quota_config(current_user: Dict[str, Any] = Depends(get_current_user)):
+    config = db_manager.get_quota_config()
+    return {"success": True, "config": config}
+
+@app.put("/api/quota-config")
+async def update_quota_config(data: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_current_user)):
+    with db_manager.lock:
+        cursor = db_manager.conn.cursor()
+        for key in ['daily_reply_limit', 'daily_delivery_limit']:
+            if key in data:
+                cursor.execute('''
+                    INSERT INTO system_settings (key, value, description) VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                ''', (key, str(data[key]), '每日配额限制'))
+        db_manager.conn.commit()
+    return {"success": True, "message": "配额配置已更新"}
+
 # ==================== 前端 SPA Catch-All 路由 ====================
 # 必须放在所有 API 路由之后，用于处理前端 SPA 的直接访问
 # 这样用户直接访问 /dashboard、/accounts 等前端路由时，会返回 index.html

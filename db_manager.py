@@ -474,6 +474,18 @@ class DBManager:
             )
             ''')
 
+            # 创建每日配额表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_quota (
+                cookie_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                auto_reply_count INTEGER DEFAULT 0,
+                auto_delivery_count INTEGER DEFAULT 0,
+                PRIMARY KEY (cookie_id, date),
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE
+            )
+            ''')
+
             # 插入默认系统设置（不包括管理员密码，由reply_server.py初始化）
             cursor.execute('''
             INSERT OR IGNORE INTO system_settings (key, value, description) VALUES
@@ -6227,6 +6239,106 @@ class DBManager:
             cursor.execute('UPDATE item_schedule SET last_run_at = CURRENT_TIMESTAMP WHERE id = ?', (schedule_id,))
             self.conn.commit()
             return True
+
+    def get_operation_logs(self, cookie_id: str = None, log_type: str = None,
+                           page: int = 1, page_size: int = 50) -> dict:
+        """获取操作日志"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                conditions = []
+                params = []
+                if cookie_id:
+                    conditions.append('cookie_id = ?')
+                    params.append(cookie_id)
+                if log_type:
+                    conditions.append('event_type = ?')
+                    params.append(log_type)
+
+                where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+
+                cursor.execute(f'SELECT COUNT(*) FROM risk_control_logs {where}', params)
+                total = cursor.fetchone()[0]
+
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM risk_control_logs {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取操作日志失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def get_daily_quota(self, cookie_id: str) -> dict:
+        """获取当日操作计数"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                today = time.strftime('%Y-%m-%d')
+                cursor.execute('''
+                    SELECT auto_reply_count, auto_delivery_count
+                    FROM daily_quota WHERE cookie_id = ? AND date = ?
+                ''', (cookie_id, today))
+                row = cursor.fetchone()
+                if row:
+                    return {'auto_reply_count': row[0], 'auto_delivery_count': row[1], 'date': today}
+                return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
+        except:
+            return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
+
+    def increment_daily_quota(self, cookie_id: str, quota_type: str) -> dict:
+        """增加当日操作计数"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                today = time.strftime('%Y-%m-%d')
+                field = 'auto_reply_count' if quota_type == 'reply' else 'auto_delivery_count'
+                cursor.execute(f'''
+                    INSERT INTO daily_quota (cookie_id, date, auto_reply_count, auto_delivery_count)
+                    VALUES (?, ?, 0, 0)
+                    ON CONFLICT(cookie_id, date) DO UPDATE SET
+                        {field} = {field} + 1
+                ''', (cookie_id, today))
+                self.conn.commit()
+                return self.get_daily_quota(cookie_id)
+        except:
+            return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
+
+    def get_quota_config(self) -> dict:
+        """获取配额配置"""
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT value FROM system_settings WHERE key = 'daily_reply_limit'")
+            reply_limit = cursor.fetchone()
+            cursor.execute("SELECT value FROM system_settings WHERE key = 'daily_delivery_limit'")
+            delivery_limit = cursor.fetchone()
+            return {
+                'daily_reply_limit': int(reply_limit[0]) if reply_limit else 200,
+                'daily_delivery_limit': int(delivery_limit[0]) if delivery_limit else 100
+            }
+
+    def check_daily_quota(self, cookie_id: str, quota_type: str) -> tuple:
+        """检查是否超出配额，返回(是否允许, 当前计数, 上限)"""
+        config = self.get_quota_config()
+        quota = self.get_daily_quota(cookie_id)
+
+        if quota_type == 'reply':
+            current = quota['auto_reply_count']
+            limit = config['daily_reply_limit']
+        else:
+            current = quota['auto_delivery_count']
+            limit = config['daily_delivery_limit']
+
+        allowed = current < limit
+        return (allowed, current, limit)
 
     def cleanup_expired_sessions(self):
         with self.lock:

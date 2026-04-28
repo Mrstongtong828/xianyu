@@ -74,8 +74,8 @@ const DeliveryRetryQueue: React.FC = () => {
     <div className="space-y-8 animate-fade-in">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">发货重试队列</h2>
-          <p className="text-gray-500 mt-2 font-medium">管理发货失败的重试记录，支持手动重新发起发货</p>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">发货重试队列</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">管理发货失败的重试记录，支持手动重新发起发货</p>
         </div>
         <button
           onClick={loadEntries}
@@ -104,7 +104,7 @@ const DeliveryRetryQueue: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[900px] md:min-w-0">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   <th className="text-left px-5 py-5 text-sm font-bold text-gray-600">订单ID</th>

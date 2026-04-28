@@ -263,3 +263,15 @@ export interface ItemSchedule {
   last_run_at?: string;
   created_at: string;
 }
+
+export interface OperationLog {
+  id: number;
+  cookie_id: string;
+  event_type: string;
+  event_description: string;
+  processing_result: string;
+  processing_status: string;
+  error_message: string;
+  created_at: string;
+  updated_at: string;
+}

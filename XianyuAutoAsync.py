@@ -809,6 +809,16 @@ class XianyuLive:
         # 注册实例到类级别字典（用于API调用）
         self._register_instance()
 
+    def _randomize_interval(self, base_seconds: float, jitter_percent: float = 0.3) -> float:
+        """在基准值基础上添加随机偏移，模拟真人操作节奏"""
+        jitter = base_seconds * jitter_percent
+        return base_seconds + random.uniform(-jitter, jitter)
+
+    def _random_delay(self, base_seconds: float = 1.0, jitter_percent: float = 0.5) -> float:
+        """在基准延迟上添加随机偏移（偏上半分布，避免太快）"""
+        jitter = base_seconds * jitter_percent
+        return base_seconds + random.uniform(0, jitter)
+
     def _init_order_status_handler(self):
         """初始化订单状态处理器"""
         try:
@@ -1301,6 +1311,18 @@ class XianyuLive:
                     else:
                         logger.info(f"无订单ID，发送单个卡券")
 
+                    # 检查每日发货配额
+                    try:
+                        from db_manager import db_manager as _dbm
+                        allowed, count, limit = _dbm.check_daily_quota(self.cookie_id, 'delivery')
+                        if not allowed:
+                            logger.warning(f"【{self.cookie_id}】今日自动发货已达上限 ({count}/{limit})，跳过发货")
+                            await self.send_delivery_failure_notification(send_user_name, send_user_id, item_id, f"今日发货已达上限({count}/{limit})", chat_id)
+                            return
+                        _dbm.increment_daily_quota(self.cookie_id, 'delivery')
+                    except Exception as qe:
+                        logger.error(f"【{self.cookie_id}】配额检查异常: {self._safe_str(qe)}")
+
                     # 多次调用自动发货方法，每次获取不同的内容
                     delivery_contents = []
                     success_count = 0
@@ -1376,7 +1398,7 @@ class XianyuLive:
 
                                     # 多数量发货时，消息间隔1秒
                                     if len(delivery_contents) > 1 and i < len(delivery_contents) - 1:
-                                        await asyncio.sleep(1)
+                                        await asyncio.sleep(self._random_delay(1.0, 0.3))
 
                                 else:
                                     # 普通文本发货内容
@@ -1388,7 +1410,7 @@ class XianyuLive:
 
                                     # 多数量发货时，消息间隔1秒
                                     if len(delivery_contents) > 1 and i < len(delivery_contents) - 1:
-                                        await asyncio.sleep(1)
+                                        await asyncio.sleep(self._random_delay(1.0, 0.3))
 
                             except Exception as e:
                                 logger.error(f"发送第 {i+1} 条消息失败: {self._safe_str(e)}")
@@ -2958,12 +2980,13 @@ class XianyuLive:
                                 logger.info(f"✅ 成功获取并保存商品详情: {item_id} - {item_title}")
                                 return 1
                             else:
-                                logger.warning(f"❌ 获取详情成功但保存失败: {item_id}")
+                                # 数据库保存失败，可能是数据库不可用，立即返回-1（不可重试）
+                                logger.error(f"数据库保存失败，跳过: {item_id}")
+                                return -1
                         else:
-                            logger.warning(f"❌ 未能获取商品详情: {item_id} - {item_title}")
-
-                        # 添加延迟，避免请求过于频繁
-                        await asyncio.sleep(retry_delay)
+                            logger.warning(f"未能获取商品详情: {item_id} - {item_title} (重试 {retry_count + 1}/{max_retries})")
+                            if retry_count < max_retries - 1:
+                                await asyncio.sleep(self._random_delay(retry_delay, 0.3))
                         return 0
 
                     except Exception as e:
@@ -3062,7 +3085,7 @@ class XianyuLive:
                     if not any('SUCCESS::调用成功' in ret for ret in ret_value):
                         logger.warning(f"商品信息API调用失败，错误信息: {ret_value}")
 
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(self._random_delay(0.5, 0.3))
                         return await self.get_item_info(item_id, retry_count + 1)
                     else:
                         logger.warning(f"商品信息获取成功: {item_id}")
@@ -3073,7 +3096,7 @@ class XianyuLive:
 
         except Exception as e:
             logger.error(f"商品信息API请求异常: {self._safe_str(e)}")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(self._random_delay(0.5, 0.3))
             return await self.get_item_info(item_id, retry_count + 1)
 
     def extract_item_id_from_message(self, message):
@@ -4407,7 +4430,7 @@ class XianyuLive:
 
         while self._running:
             try:
-                await asyncio.sleep(60)
+                await asyncio.sleep(self._randomize_interval(60, 0.2))
 
                 from db_manager import db_manager
                 pending = db_manager.get_pending_schedules()
@@ -4440,7 +4463,7 @@ class XianyuLive:
                 break
             except Exception as e:
                 logger.error(f"【{self.cookie_id}】智能上下架循环异常: {self._safe_str(e)}")
-                await asyncio.sleep(60)
+                await asyncio.sleep(self._randomize_interval(60, 0.2))
 
         logger.info(f"【{self.cookie_id}】智能上下架循环已停止")
 
@@ -4500,7 +4523,7 @@ class XianyuLive:
         
         while self._running:
             try:
-                await asyncio.sleep(retry_interval)
+                await asyncio.sleep(self._randomize_interval(retry_interval, 0.2))
                 if not self._running:
                     break
                 
@@ -4565,7 +4588,7 @@ class XianyuLive:
                                         await self.send_image_msg(self.websocket, chat_id, send_user_id, image_data)
                                 else:
                                     await self.send_msg(self.websocket, chat_id, send_user_id, content)
-                                await asyncio.sleep(0.5)
+                                await asyncio.sleep(self._random_delay(0.5, 0.3))
                             
                             db_manager.update_delivery_retry_status(
                                 retry_id, 'success', '重试发货成功',
@@ -4598,7 +4621,7 @@ class XianyuLive:
                 break
             except Exception as e:
                 logger.error(f"【{self.cookie_id}】发货重试循环异常: {self._safe_str(e)}")
-                await asyncio.sleep(60)
+                await asyncio.sleep(self._randomize_interval(60, 0.2))
         
         logger.info(f"【{self.cookie_id}】发货重试循环已停止")
 
@@ -5295,7 +5318,7 @@ class XianyuLive:
                     if retry_count < max_retries - 1:
                         wait_time = (retry_count + 1) * 2  # 递增等待时间: 2s, 4s, 6s
                         logger.info(f"等待 {wait_time} 秒后重试...")
-                        await asyncio.sleep(wait_time)
+                        await asyncio.sleep(self._random_delay(wait_time, 0.3))
                         return await self._get_api_card_content(rule, order_id, item_id, buyer_id, spec_name, spec_value, retry_count + 1)
 
                 return None
@@ -5307,7 +5330,7 @@ class XianyuLive:
             if retry_count < max_retries - 1:
                 wait_time = (retry_count + 1) * 2  # 递增等待时间
                 logger.info(f"等待 {wait_time} 秒后重试...")
-                await asyncio.sleep(wait_time)
+                await asyncio.sleep(self._random_delay(wait_time, 0.3))
                 return await self._get_api_card_content(rule, order_id, item_id, buyer_id, spec_name, spec_value, retry_count + 1)
             else:
                 logger.error(f"API调用网络异常，已达到最大重试次数: {self._safe_str(e)}")
@@ -5480,9 +5503,9 @@ class XianyuLive:
 
                             # 发送Token刷新失败通知
                             await self.send_token_refresh_notification("Token定时刷新失败，将自动重试", "token_scheduled_refresh_failed")
-                            await self._interruptible_sleep(self.token_retry_interval)
+                            await self._interruptible_sleep(self._randomize_interval(self.token_retry_interval, 0.2))
                             continue
-                    await self._interruptible_sleep(60)
+                    await self._interruptible_sleep(self._randomize_interval(60, 0.2))
                 except asyncio.CancelledError:
                     # 收到取消信号，立即退出循环
                     logger.info(f"【{self.cookie_id}】Token刷新循环收到取消信号，准备退出")
@@ -5491,7 +5514,7 @@ class XianyuLive:
                     logger.error(f"Token刷新循环出错: {self._safe_str(e)}")
                     # 出错后也等待1分钟再重试，使用可中断的sleep
                     try:
-                        await self._interruptible_sleep(60)
+                        await self._interruptible_sleep(self._randomize_interval(60, 0.2))
                     except asyncio.CancelledError:
                         logger.info(f"【{self.cookie_id}】Token刷新循环在重试等待时收到取消信号，准备退出")
                         raise
@@ -5605,7 +5628,7 @@ class XianyuLive:
             }
         }
         await ws.send(json.dumps(msg))
-        await asyncio.sleep(1)
+        await asyncio.sleep(self._random_delay(1.0, 0.3))
         current_time = int(time.time() * 1000)
         msg = {
             "lwp": "/r/SyncStatus/ackDiff",
@@ -5671,7 +5694,7 @@ class XianyuLive:
                     await self.send_heartbeat(ws)
                     consecutive_failures = 0  # 重置失败计数
 
-                    await self._interruptible_sleep(self.heartbeat_interval)
+                    await self._interruptible_sleep(self._randomize_interval(self.heartbeat_interval, 0.2))
 
                 except asyncio.CancelledError:
                     # 收到取消信号，立即退出循环
@@ -5687,7 +5710,7 @@ class XianyuLive:
 
                     # 失败后短暂等待再重试，使用可中断的sleep
                     try:
-                        await self._interruptible_sleep(5)
+                        await self._interruptible_sleep(self._randomize_interval(5, 0.2))
                     except asyncio.CancelledError:
                         # 在等待重试时收到取消信号，立即退出
                         logger.info(f"【{self.cookie_id}】心跳循环在重试等待时收到取消信号，准备退出")
@@ -5802,7 +5825,7 @@ class XianyuLive:
                         logger.error(f"【{self.cookie_id}】清理数据库历史数据时出错: {db_clean_e}")
 
                     # 每5分钟清理一次
-                    await self._interruptible_sleep(300)
+                    await self._interruptible_sleep(self._randomize_interval(300, 0.2))
                 except asyncio.CancelledError:
                     # 收到取消信号，立即退出循环
                     logger.info(f"【{self.cookie_id}】清理循环收到取消信号，准备退出")
@@ -5811,7 +5834,7 @@ class XianyuLive:
                     logger.error(f"【{self.cookie_id}】清理任务失败: {self._safe_str(e)}")
                     # 出错后也等待5分钟再重试，使用可中断的sleep
                     try:
-                        await self._interruptible_sleep(300)
+                        await self._interruptible_sleep(self._randomize_interval(300, 0.2))
                     except asyncio.CancelledError:
                         logger.info(f"【{self.cookie_id}】清理循环在重试等待时收到取消信号，准备退出")
                         raise
@@ -5851,7 +5874,7 @@ class XianyuLive:
 
                     # 检查是否启用了商品同步功能
                     if not item_sync_enabled:
-                        await self._interruptible_sleep(60)  # 未启用时每分钟检查一次
+                        await self._interruptible_sleep(self._randomize_interval(60, 0.2))  # 未启用时每分钟检查一次
                         continue
 
                     # 检查距离上次同步的时间
@@ -5865,7 +5888,7 @@ class XianyuLive:
                     # 使用Lock防止重复执行
                     if self.item_sync_lock.locked():
                         logger.info(f"【{self.cookie_id}】商品同步任务正在进行中，跳过本次执行")
-                        await self._interruptible_sleep(60)
+                        await self._interruptible_sleep(self._randomize_interval(60, 0.2))
                         continue
 
                     # 执行商品同步
@@ -5890,7 +5913,7 @@ class XianyuLive:
                             logger.error(f"【{self.cookie_id}】商品同步异常: {self._safe_str(sync_error)}")
 
                     # 等待下次同步时间
-                    await self._interruptible_sleep(item_sync_interval)
+                    await self._interruptible_sleep(self._randomize_interval(item_sync_interval, 0.2))
 
                 except asyncio.CancelledError:
                     # 收到取消信号，立即退出循环
@@ -5900,7 +5923,7 @@ class XianyuLive:
                     logger.error(f"【{self.cookie_id}】商品同步任务失败: {self._safe_str(e)}")
                     # 出错后等待1分钟再重试
                     try:
-                        await self._interruptible_sleep(60)
+                        await self._interruptible_sleep(self._randomize_interval(60, 0.2))
                     except asyncio.CancelledError:
                         logger.info(f"【{self.cookie_id}】商品同步循环在重试等待时收到取消信号，准备退出")
                         raise
@@ -5927,7 +5950,7 @@ class XianyuLive:
                     # 检查Cookie刷新功能是否启用
                     if not self.cookie_refresh_enabled:
                         logger.warning(f"【{self.cookie_id}】Cookie刷新功能已禁用，跳过执行")
-                        await self._interruptible_sleep(300)  # 5分钟后再检查
+                        await self._interruptible_sleep(self._randomize_interval(300, 0.2))  # 5分钟后再检查
                         continue
 
                     current_time = time.time()
@@ -5948,7 +5971,7 @@ class XianyuLive:
                             asyncio.create_task(self._execute_cookie_refresh(current_time))
 
                     # 每分钟检查一次是否需要执行
-                    await self._interruptible_sleep(60)
+                    await self._interruptible_sleep(self._randomize_interval(60, 0.2))
                 except asyncio.CancelledError:
                     # 收到取消信号，立即退出循环
                     logger.info(f"【{self.cookie_id}】Cookie刷新循环收到取消信号，准备退出")
@@ -5957,7 +5980,7 @@ class XianyuLive:
                     logger.error(f"【{self.cookie_id}】Cookie刷新循环失败: {self._safe_str(e)}")
                     # 出错后也等待1分钟再重试，使用可中断的sleep
                     try:
-                        await self._interruptible_sleep(60)
+                        await self._interruptible_sleep(self._randomize_interval(60, 0.2))
                     except asyncio.CancelledError:
                         logger.info(f"【{self.cookie_id}】Cookie刷新循环在重试等待时收到取消信号，准备退出")
                         raise
@@ -7548,7 +7571,7 @@ class XianyuLive:
                 saved_timer = current_timer  # 保存创建任务时的时间戳
                 try:
                     # 等待防抖延迟时间
-                    await asyncio.sleep(self.message_debounce_delay)
+                    await asyncio.sleep(self._random_delay(self.message_debounce_delay, 0.2))
                     
                     # 检查是否仍然是最新的消息（防止在等待期间有新消息）
                     async with self.message_debounce_lock:
@@ -7748,6 +7771,16 @@ class XianyuLive:
 
             # 如果有回复内容，发送消息
             if reply:
+                # 检查每日回复配额
+                try:
+                    from db_manager import db_manager as _dbm
+                    allowed, count, limit = _dbm.check_daily_quota(self.cookie_id, 'reply')
+                    if not allowed:
+                        logger.warning(f"【{self.cookie_id}】今日自动回复已达上限 ({count}/{limit})，跳过回复")
+                        return
+                    _dbm.increment_daily_quota(self.cookie_id, 'reply')
+                except Exception as qe:
+                    logger.error(f"【{self.cookie_id}】配额检查异常: {self._safe_str(qe)}")
                 # 检查是否是图片发送标记
                 if reply.startswith("__IMAGE_SEND__"):
                     # 提取图片URL（关键词回复不包含卡券ID）
@@ -8272,7 +8305,7 @@ class XianyuLive:
 
                         # 延迟2秒后执行免拼发货
                         logger.info(f'[{msg_time}] 【{self.cookie_id}】延迟2秒后执行免拼发货...')
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(self._random_delay(2.0, 0.3))
                         # 调用自动免拼发货方法
                         result = await self.auto_freeshipping(order_id, item_id, send_user_id)
                         if result.get('success'):
@@ -8503,7 +8536,7 @@ class XianyuLive:
                                 # 更新连接状态
                                 self._set_connection_state(ConnectionState.RECONNECTING, "Cookie已刷新，准备重连")
                                 # 短暂等待后继续重连循环
-                                await asyncio.sleep(2)
+                                await asyncio.sleep(self._random_delay(2.0, 0.3))
                                 continue
                             else:
                                 logger.warning(f"【{self.cookie_id}】❌ 密码登录刷新失败，将重启实例...")
@@ -8538,6 +8571,7 @@ class XianyuLive:
 
                     # 计算重试延迟
                     retry_delay = self._calculate_retry_delay(error_msg)
+                    retry_delay = self._randomize_interval(retry_delay, 0.3)
                     logger.warning(f"【{self.cookie_id}】将在 {retry_delay} 秒后重试连接...")
 
                     try:
@@ -8863,7 +8897,7 @@ class XianyuLive:
                     error_msg = res_json.get('ret', [''])[0] if res_json.get('ret') else ''
                     if 'FAIL_SYS_TOKEN_EXOIRED' in error_msg or 'token' in error_msg.lower():
                         logger.warning(f"Token失效，准备重试: {error_msg}")
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(self._random_delay(0.5, 0.3))
                         return await self.get_item_list_info(page_number, page_size, retry_count + 1)
                     else:
                         logger.error(f"获取商品信息失败: {res_json}")
@@ -8871,7 +8905,7 @@ class XianyuLive:
 
         except Exception as e:
             logger.error(f"商品信息API请求异常: {self._safe_str(e)}")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(self._random_delay(0.5, 0.3))
             return await self.get_item_list_info(page_number, page_size, retry_count + 1)
 
     async def get_all_items(self, page_size=20, max_pages=None):
@@ -8920,7 +8954,7 @@ class XianyuLive:
             page_number += 1
 
             # 添加延迟避免请求过快
-            await asyncio.sleep(1)
+            await asyncio.sleep(self._random_delay(1.0, 0.3))
 
         logger.info(f"所有商品获取完成，共 {len(all_items)} 个商品，保存了 {total_saved} 个")
 

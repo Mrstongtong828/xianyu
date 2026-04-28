@@ -25,6 +25,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html.dark body {
+  background-color: #030712;
+  color: #f3f4f6;
+}
+
 /* 闲鱼风格卡片 */
 .ios-card {
   background: #FFFFFF;
@@ -367,4 +372,33 @@ body {
     padding-left: 1.5rem;
     padding-right: 1.5rem;
   }
+}
+
+html.dark .ios-card {
+  background: #111827;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+html.dark .ios-input {
+  background: #1f2937;
+  color: #f3f4f6;
+  border-color: #374151;
+}
+
+html.dark .modal-container {
+  background-color: #111827;
+}
+
+html.dark .modal-header,
+html.dark .modal-footer {
+  background-color: #111827;
+  border-color: #1f2937;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }

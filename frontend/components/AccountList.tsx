@@ -284,8 +284,8 @@ const AccountList: React.FC = () => {
     <div className="space-y-8 animate-fade-in relative">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">账号管理</h2>
-          <p className="text-gray-500 mt-2 font-medium">管理您的闲鱼授权账号及设置。</p>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">账号管理</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">管理您的闲鱼授权账号及设置。</p>
         </div>
         <button
             onClick={startQRLogin}

@@ -48,8 +48,8 @@ const Settings: React.FC = () => {
               <SettingsIcon className="w-6 h-6 text-gray-600" />
           </div>
           <div>
-              <h2 className="text-3xl font-extrabold text-gray-900">系统设置</h2>
-              <p className="text-gray-500 mt-1 text-sm font-medium">配置全局自动化规则与系统参数</p>
+              <h2 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100">系统设置</h2>
+              <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm font-medium">配置全局自动化规则与系统参数</p>
           </div>
         </div>
         <button
