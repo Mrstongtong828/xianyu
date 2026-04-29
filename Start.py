@@ -548,6 +548,7 @@ except Exception as e:
 
 # ==================== 现在可以安全地导入其他模块 ====================
 import asyncio
+import signal
 import threading
 import uvicorn
 from urllib.parse import urlparse
@@ -644,6 +645,42 @@ async def main():
     logger.info("文件日志收集器已启动，开始收集实时日志")
 
     loop = asyncio.get_running_loop()
+    shutdown_event = asyncio.Event()
+
+    async def _shutdown():
+        if shutdown_event.is_set():
+            return
+        shutdown_event.set()
+        logger.info("收到关闭信号，开始优雅关闭...")
+
+        # 取消所有运行中的任务
+        tasks = [t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+            logger.info(f"已取消 {len(tasks)} 个运行中的任务")
+
+        # 关闭数据库连接
+        try:
+            db_manager.close()
+            logger.info("数据库连接已关闭")
+        except Exception:
+            pass
+
+        loop.stop()
+
+    def _signal_handler():
+        asyncio.ensure_future(_shutdown())
+
+    try:
+        if sys.platform != 'win32':
+            loop.add_signal_handler(signal.SIGTERM, _signal_handler)
+        loop.add_signal_handler(signal.SIGINT, _signal_handler)
+    except (NotImplementedError, RuntimeError):
+        signal.signal(signal.SIGINT, lambda s, f: asyncio.ensure_future(_shutdown()))
+        if sys.platform != 'win32':
+            signal.signal(signal.SIGTERM, lambda s, f: asyncio.ensure_future(_shutdown()))
 
     # 创建 CookieManager 并在全局暴露
     print("创建 CookieManager...")
@@ -700,9 +737,10 @@ async def main():
     threading.Thread(target=_start_api_server, daemon=True).start()
     print("API 服务线程已启动")
 
-    # 阻塞保持运行
+    # 阻塞保持运行，直到收到关闭信号
     print("主程序启动完成，保持运行...")
-    await asyncio.Event().wait()
+    await shutdown_event.wait()
+    logger.info("主程序已退出")
 
 
 if __name__ == '__main__':

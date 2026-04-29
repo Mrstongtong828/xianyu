@@ -185,8 +185,8 @@ class CookieManager:
         """线程安全新增 Cookie 并启动任务"""
         if kw_list is not None:
             self.keywords[cookie_id] = kw_list
-        else:
-            self.keywords.setdefault(cookie_id, [])
+        elif cookie_id not in self.keywords:
+            self.keywords[cookie_id] = []
         try:
             current_loop = asyncio.get_running_loop()
         except RuntimeError:

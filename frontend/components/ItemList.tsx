@@ -124,8 +124,8 @@ const ItemList: React.FC = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">商品管理</h2>
-          <p className="text-gray-500 mt-2 text-sm">监控并管理所有账号下的闲鱼商品。</p>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">商品管理</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">监控并管理所有账号下的闲鱼商品。</p>
         </div>
         <div className="flex gap-3">
             <select

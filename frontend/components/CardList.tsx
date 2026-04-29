@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '../types';
-import { getCards, createCard, updateCard, deleteCard } from '../services/api';
-import { Plus, CreditCard, Clock, FileText, Image as ImageIcon, Code, Edit, Trash2, Save, X, Eye, EyeOff, Package } from 'lucide-react';
+import { getCards, createCard, updateCard, deleteCard, batchImportCards } from '../services/api';
+import { Plus, CreditCard, Clock, FileText, Image as ImageIcon, Code, Edit, Trash2, Save, X, Eye, EyeOff, Package, Upload } from 'lucide-react';
 
 const CardList: React.FC = () => {
   const [cards, setCards] = useState<Card[]>([]);
@@ -18,6 +18,10 @@ const CardList: React.FC = () => {
     enabled: true,
     delay_seconds: 0
   });
+  const [showBatchImportModal, setShowBatchImportModal] = useState(false);
+  const [batchImportCsv, setBatchImportCsv] = useState('');
+  const [batchImportResult, setBatchImportResult] = useState<{ success: boolean; total: number; success_count: number; fail_count: number; errors: Array<{ row: number; error: string }> } | null>(null);
+  const [batchImporting, setBatchImporting] = useState(false);
 
   useEffect(() => {
     getCards().then(setCards);
@@ -153,25 +157,77 @@ const CardList: React.FC = () => {
     }
   };
 
+  const parseCSV = (text: string) => {
+    const lines = text.split('\n').filter(l => l.trim());
+    return lines.map(line => {
+      const parts = line.split(',').map(p => p.trim());
+      return {
+        name: parts[0] || '',
+        type: parts[1] || 'text',
+        text_content: parts[2] || '',
+        description: parts[3] || '',
+        delay_seconds: parseInt(parts[4]) || 0,
+      };
+    });
+  };
+
+  const handleBatchImport = async () => {
+    if (!batchImportCsv.trim()) {
+      alert('请输入CSV数据');
+      return;
+    }
+    const items = parseCSV(batchImportCsv);
+    if (items.length === 0) {
+      alert('未解析到任何数据');
+      return;
+    }
+    setBatchImporting(true);
+    try {
+      const result = await batchImportCards(items);
+      setBatchImportResult(result);
+      if (result.success_count > 0) {
+        getCards().then(setCards);
+      }
+    } catch (error) {
+      console.error('批量导入失败:', error);
+      alert('批量导入失败，请重试');
+    } finally {
+      setBatchImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">卡密库存</h2>
-          <p className="text-gray-500 mt-2 text-sm">管理自动发货的卡密、链接或图片资源。</p>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100">卡密库存</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">管理自动发货的卡密、链接或图片资源。</p>
         </div>
-        <button
-            onClick={() => setShowAddModal(true)}
-            className="ios-btn-primary flex items-center gap-2 px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 transition-transform hover:scale-105 active:scale-95"
-        >
-          <Plus className="w-5 h-5" />
-          添加新卡密
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+              onClick={() => {
+                setBatchImportCsv('');
+                setBatchImportResult(null);
+                setShowBatchImportModal(true);
+              }}
+              className="ios-btn-primary flex items-center gap-2 px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 transition-transform hover:scale-105 active:scale-95"
+          >
+            <Upload className="w-5 h-5" />
+            批量导入
+          </button>
+          <button
+              onClick={() => setShowAddModal(true)}
+              className="ios-btn-primary flex items-center gap-2 px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 transition-transform hover:scale-105 active:scale-95"
+          >
+            <Plus className="w-5 h-5" />
+            添加新卡密
+          </button>
+        </div>
       </div>
 
       <div className="ios-card rounded-[2rem] overflow-hidden shadow-lg border-0 bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[800px] md:min-w-0">
             <thead>
               <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
                 <th className="px-8 py-5 w-[15%]">卡密名称</th>
@@ -674,6 +730,96 @@ const CardList: React.FC = () => {
                 >
                   <Plus className="w-4 h-4" />
                   添加卡密
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 批量导入卡券弹窗 - 使用 Portal */}
+      {showBatchImportModal && createPortal(
+        <div className="modal-overlay-centered">
+          <div className="modal-container modal-container-lg">
+            <div className="modal-header">
+              <h3 className="text-2xl font-extrabold text-gray-900">批量导入卡券</h3>
+              <button
+                onClick={() => setShowBatchImportModal(false)}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="space-y-5">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-sm font-bold text-amber-800 mb-2">CSV 格式说明</p>
+                  <p className="text-xs text-amber-700 font-mono">
+                    名称,类型,内容,描述,延时秒数
+                  </p>
+                  <p className="text-xs text-amber-600 mt-1">
+                    类型可选：text（固定文字）、data（批量数据）、image（图片）、api（API接口）
+                  </p>
+                  <p className="text-xs text-amber-600 mt-1">
+                    每行一个卡券，字段用英文逗号分隔，延时秒数默认为 0
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2 font-mono">
+                    示例：example_card,text,这是卡券内容,这是描述,0
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">CSV 数据</label>
+                  <textarea
+                    value={batchImportCsv}
+                    onChange={(e) => { setBatchImportCsv(e.target.value); setBatchImportResult(null); }}
+                    className="w-full ios-input px-4 py-3 rounded-xl h-64 resize-none font-mono text-sm"
+                    placeholder={'card1,text,卡券内容,这是第一个卡券,0\ncard2,data,批量数据内容,这是第二个卡券,5\ncard3,image,https://example.com/img.png,图片卡券,0'}
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    已解析：<span className="font-bold text-amber-600">{batchImportCsv.trim() ? parseCSV(batchImportCsv).length : 0}</span> 条数据
+                  </p>
+                </div>
+
+                {batchImportResult && (
+                  <div className={`rounded-xl p-4 ${batchImportResult.fail_count > 0 ? 'bg-orange-50 border border-orange-200' : 'bg-green-50 border border-green-200'}`}>
+                    <p className="text-sm font-bold text-gray-900 mb-2">导入结果</p>
+                    <div className="flex gap-4 mb-2">
+                      <span className="text-sm text-gray-600">总计：<span className="font-bold">{batchImportResult.total}</span> 条</span>
+                      <span className="text-sm text-green-600">成功：<span className="font-bold">{batchImportResult.success_count}</span> 条</span>
+                      <span className="text-sm text-red-500">失败：<span className="font-bold">{batchImportResult.fail_count}</span> 条</span>
+                    </div>
+                    {batchImportResult.errors.length > 0 && (
+                      <div className="mt-3 max-h-40 overflow-y-auto space-y-1">
+                        {batchImportResult.errors.map((err, idx) => (
+                          <p key={idx} className="text-xs text-red-600 font-mono">
+                            第 {err.row} 行：{err.error}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowBatchImportModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleBatchImport}
+                  disabled={batchImporting || !batchImportCsv.trim()}
+                  className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  {batchImporting ? '导入中...' : '开始导入'}
                 </button>
               </div>
             </div>

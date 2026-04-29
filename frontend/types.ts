@@ -195,3 +195,83 @@ export interface DefaultReply {
   reply_once: boolean;
   reply_image_url?: string;
 }
+
+export interface BlacklistEntry {
+  id: number;
+  user_id: number;
+  buyer_id: string;
+  buyer_name: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface DeliveryRetryEntry {
+  id: number;
+  cookie_id: string;
+  order_id: string;
+  item_id: string;
+  buyer_id: string;
+  buyer_name: string;
+  chat_id: string;
+  quantity: number;
+  error_type: string;
+  error_message: string;
+  retry_count: number;
+  max_retries: number;
+  next_retry_at: string;
+  status: 'pending' | 'retrying' | 'failed' | 'success';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvaluationConfig {
+  auto_evaluate_enabled: boolean;
+  evaluate_content: string;
+  auto_reply_review_enabled: boolean;
+  reply_review_content: string;
+}
+
+export interface AIConversation {
+  id: number;
+  cookie_id: string;
+  chat_id: string;
+  user_id: string;
+  item_id: string;
+  role: string;
+  content: string;
+  intent?: string;
+  bargain_count?: number;
+  created_at: string;
+}
+
+export interface AIChatSummary {
+  chat_id: string;
+  buyer_id: string;
+  msg_count: number;
+  last_msg: string;
+}
+
+export interface ItemSchedule {
+  id: number;
+  cookie_id: string;
+  item_id: string;
+  item_title: string;
+  schedule_type: 'list' | 'delist';
+  schedule_time: string;
+  cron_expression: string;
+  enabled: boolean;
+  last_run_at?: string;
+  created_at: string;
+}
+
+export interface OperationLog {
+  id: number;
+  cookie_id: string;
+  event_type: string;
+  event_description: string;
+  processing_result: string;
+  processing_status: string;
+  error_message: string;
+  created_at: string;
+  updated_at: string;
+}

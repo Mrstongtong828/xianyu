@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AdminStats, OrderAnalytics, Order, OrderStatus, Item } from '../types';
-import { getAdminStats, getOrderAnalytics, getValidOrders, getItems } from '../services/api';
+import { getAdminStats, getOrderAnalytics, getValidOrders, getItems, getAccountDetails, getDailyQuota } from '../services/api';
 import { TrendingUp, Users, ShoppingCart, AlertCircle, DollarSign, Activity, Package, ArrowUpRight, Calendar, X, BarChart3, PackageCheck, ExternalLink, Eye, Edit } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -43,8 +43,8 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.El
       </span>}
     </div>
     <div className="relative z-10">
-      <h3 className="text-3xl font-extrabold text-gray-900 tracking-tight font-feature-settings-tnum">{value}</h3>
-      <p className="text-gray-500 text-sm font-medium mt-1">{title}</p>
+      <h3 className="text-3xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight font-feature-settings-tnum">{value}</h3>
+      <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mt-1">{title}</p>
     </div>
   </div>
 );
@@ -67,6 +67,9 @@ const Dashboard: React.FC = () => {
   // 商品列表
   const [items, setItems] = useState<Item[]>([]);
   const [itemNames, setItemNames] = useState<Record<string, string>>({});
+  // 每日配额
+  const [accountQuotas, setAccountQuotas] = useState<Record<string, { auto_reply_count: number; auto_delivery_count: number; config: { daily_reply_limit: number; daily_delivery_limit: number } }>>({});
+  const [accounts, setAccounts] = useState<{ id: string; remark: string }[]>([]);
 
   // 颜色配置
   const COLORS = ['#FFE815', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6'];
@@ -279,6 +282,20 @@ const Dashboard: React.FC = () => {
       .finally(() => setOrdersLoading(false));
   }, [timeRange]);
 
+  useEffect(() => {
+    getAccountDetails().then(accs => {
+      setAccounts(accs.map(a => ({ id: a.id, remark: a.remark || a.nickname || '' })));
+      Promise.all(accs.map(a => getDailyQuota(a.id).then(q => ({ id: a.id, quota: q })).catch(() => null)))
+        .then(results => {
+          const quotas: Record<string, any> = {};
+          results.forEach(r => {
+            if (r) quotas[r.id] = { ...r.quota.quota, config: r.quota.config };
+          });
+          setAccountQuotas(quotas);
+        });
+    }).catch(console.error);
+  }, []);
+
   // 辅助函数：获取时间范围的日期
   const getDatesForRange = (range: TimeRange) => {
     const now = new Date();
@@ -373,11 +390,11 @@ const Dashboard: React.FC = () => {
     <div className="space-y-8 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
         <div>
-          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">运营概览</h2>
-          <p className="text-gray-500 mt-2 text-base">欢迎回来，以下是闲鱼店铺的实时经营数据。</p>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">运营概览</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 text-base">欢迎回来，以下是闲鱼店铺的实时经营数据。</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-sm font-bold text-gray-700 bg-white px-5 py-2.5 rounded-full shadow-sm border border-gray-100 flex items-center gap-2">
+          <div className="text-sm font-bold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 px-5 py-2.5 rounded-full shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-2">
             <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
             系统正常运行
           </div>
@@ -385,7 +402,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Time Range Selector */}
-      <div className="flex flex-wrap gap-2 p-2 bg-gray-100/50 rounded-2xl">
+      <div className="flex flex-wrap gap-2 p-2 bg-gray-100/50 dark:bg-gray-800/50 rounded-2xl">
         {timeRangeOptions.map((option) => (
           <button
             key={option.key}
@@ -393,7 +410,7 @@ const Dashboard: React.FC = () => {
             className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
               timeRange === option.key
                 ? 'bg-[#FFE815] text-black shadow-md'
-                : 'bg-white text-gray-600 hover:text-black hover:bg-gray-50'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
             }`}
           >
             {option.label}
@@ -425,7 +442,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         <StatCard
           title="累计营收 (CNY)"
           value={`¥${analytics.revenue_stats.total_amount.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`}
@@ -456,8 +473,8 @@ const Dashboard: React.FC = () => {
       {/* Main Chart Section */}
       <div className="ios-card p-8 rounded-[2rem]">
         <div className="mb-10">
-          <h3 className="text-xl font-bold text-gray-900">营收趋势分析</h3>
-          <p className="text-sm text-gray-400 mt-1">最近7天的销售额走势</p>
+          <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">营收趋势分析</h3>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">最近7天的销售额走势</p>
         </div>
         <div className="h-[350px] w-full">
           {chartData.length === 0 || analytics.revenue_stats.total_amount === 0 ? (
@@ -550,7 +567,7 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* 商品销量排行 */}
         <div className="ios-card p-6 rounded-[2rem]">
-          <h3 className="font-bold text-lg text-gray-900 mb-6">商品销量排行</h3>
+          <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 mb-6">商品销量排行</h3>
           <div className="h-[280px]">
             {productSalesData.length === 0 ? (
               <div className="flex items-center justify-center h-full text-gray-400">暂无数据</div>
@@ -589,7 +606,7 @@ const Dashboard: React.FC = () => {
 
         {/* 商品下单占比 */}
         <div className="ios-card p-6 rounded-[2rem]">
-          <h3 className="font-bold text-lg text-gray-900 mb-6">商品下单占比</h3>
+          <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 mb-6">商品下单占比</h3>
           <div className="h-[280px]">
             {sourceDataData.length === 0 ? (
               <div className="flex items-center justify-center h-full text-gray-400">暂无数据</div>
@@ -628,8 +645,8 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* 参与统计的订单列表 */}
         <div className="lg:col-span-2 ios-card p-0 rounded-[2rem] border-0 bg-white overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-[#FAFAFA]">
-            <h3 className="font-bold text-lg text-gray-900">参与统计的订单</h3>
+          <div className="p-6 border-b border-gray-50 dark:border-gray-800 flex justify-between items-center bg-[#FAFAFA] dark:bg-gray-900">
+            <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">参与统计的订单</h3>
             <div className="relative">
               <input
                 placeholder="搜索订单号/商品/买家..."
@@ -655,7 +672,7 @@ const Dashboard: React.FC = () => {
                 暂无订单数据
               </div>
             ) : (
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse min-w-[800px] md:min-w-0">
                 <thead>
                   <tr className="bg-white text-gray-400 text-xs font-bold uppercase tracking-wider border-b border-gray-50">
                     <th className="px-6 py-4">订单信息</th>
@@ -721,7 +738,7 @@ const Dashboard: React.FC = () => {
 
         {/* 商品金额分析 */}
         <div className="ios-card p-6 rounded-[2rem] bg-white">
-          <h3 className="font-bold text-lg text-gray-900 mb-6">商品金额分析 (TOP5)</h3>
+          <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100 mb-6">商品金额分析 (TOP5)</h3>
           {categoryDataData.length === 0 ? (
             <div className="flex items-center justify-center h-[300px] text-gray-400">暂无数据</div>
           ) : (
@@ -776,6 +793,48 @@ const Dashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {Object.keys(accountQuotas).length > 0 && (
+        <div className="ios-card p-6 rounded-[2rem]">
+          <h3 className="font-bold text-lg text-gray-900 mb-4">每日操作配额</h3>
+          <div className="space-y-4">
+            {Object.entries(accountQuotas).map(([cookieId, quota]: [string, any]) => {
+              const replyPercent = quota.config.daily_reply_limit > 0 ? (quota.auto_reply_count / quota.config.daily_reply_limit) * 100 : 0;
+              const deliveryPercent = quota.config.daily_delivery_limit > 0 ? (quota.auto_delivery_count / quota.config.daily_delivery_limit) * 100 : 0;
+              const getBarColor = (pct: number) => pct < 50 ? 'bg-green-400' : pct < 80 ? 'bg-yellow-400' : 'bg-red-400';
+              const getTextColor = (pct: number) => pct < 50 ? 'text-green-600' : pct < 80 ? 'text-yellow-600' : 'text-red-600';
+              const accountRemark = accounts.find(a => a.id === cookieId)?.remark || cookieId.substring(0, 10) + '...';
+              return (
+                <div key={cookieId} className="border border-gray-100 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-bold text-gray-800 text-sm">{accountRemark}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-gray-500">回复</span>
+                        <span className={getTextColor(replyPercent)}>{quota.auto_reply_count}/{quota.config.daily_reply_limit}</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${getBarColor(replyPercent)}`} style={{ width: `${Math.min(replyPercent, 100)}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-1">
+                        <span className="text-gray-500">发货</span>
+                        <span className={getTextColor(deliveryPercent)}>{quota.auto_delivery_count}/{quota.config.daily_delivery_limit}</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${getBarColor(deliveryPercent)}`} style={{ width: `${Math.min(deliveryPercent, 100)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,7 +2,9 @@ import { get, post, put, del } from '../lib/request';
 import {
   LoginResponse, AccountDetail, Order, PaginatedResponse,
   AdminStats, Card, SystemSettings, ApiResponse, OrderAnalytics,
-  Item, AIReplySettings, ShippingRule, ReplyRule, DefaultReply
+  Item, AIReplySettings, ShippingRule, ReplyRule, DefaultReply,
+  BlacklistEntry, DeliveryRetryEntry, EvaluationConfig, ItemSchedule,
+  AIConversation, AIChatSummary, OperationLog
 } from '../types';
 
 // Auth
@@ -473,4 +475,110 @@ export const deleteDefaultReply = async (cookieId: string): Promise<ApiResponse>
 
 export const clearDefaultReplyRecords = async (cookieId: string): Promise<ApiResponse> => {
   return post(`/api/default-reply/${cookieId}/clear-records`, {});
+};
+
+// Blacklist
+export const getBlacklist = async (page?: number, pageSize?: number): Promise<{ success: boolean; data: BlacklistEntry[]; total: number; page: number; page_size: number }> => {
+  const params = new URLSearchParams();
+  if (page) params.append('page', String(page));
+  if (pageSize) params.append('page_size', String(pageSize));
+  return get(`/api/blacklist?${params.toString()}`);
+};
+
+export const addToBlacklist = async (buyerId: string, buyerName?: string, reason?: string): Promise<ApiResponse> => {
+  return post('/api/blacklist', { buyer_id: buyerId, buyer_name: buyerName || '', reason: reason || '' });
+};
+
+export const removeFromBlacklist = async (id: number): Promise<ApiResponse> => {
+  return del(`/api/blacklist/${id}`);
+};
+
+// Delivery Retry Queue
+export const getDeliveryRetryQueue = async (cookieId?: string, page?: number, pageSize?: number): Promise<{ success: boolean; data: DeliveryRetryEntry[]; total: number; page: number; page_size: number }> => {
+  const params = new URLSearchParams();
+  if (cookieId) params.append('cookie_id', cookieId);
+  if (page) params.append('page', String(page));
+  if (pageSize) params.append('page_size', String(pageSize));
+  return get(`/api/delivery-retry-queue?${params.toString()}`);
+};
+
+export const retryDelivery = async (id: number): Promise<ApiResponse> => {
+  return post(`/api/delivery-retry-queue/${id}/retry`);
+};
+
+export const deleteDeliveryRetry = async (id: number): Promise<ApiResponse> => {
+  return del(`/api/delivery-retry-queue/${id}`);
+};
+
+// Evaluation Config
+export const getEvaluationConfig = async (cookieId: string): Promise<EvaluationConfig> => {
+  const res = await get<{ data: EvaluationConfig }>(`/api/evaluation-config/${cookieId}`);
+  return res.data;
+};
+
+export const updateEvaluationConfig = async (cookieId: string, data: Partial<EvaluationConfig>): Promise<ApiResponse> => {
+  return put(`/api/evaluation-config/${cookieId}`, data);
+};
+
+export const getAIConversations = async (params?: { cookie_id?: string; chat_id?: string; buyer_id?: string; page?: number; page_size?: number }): Promise<{ success: boolean; data: AIConversation[]; total: number; page: number; page_size: number }> => {
+  const sp = new URLSearchParams();
+  if (params?.cookie_id) sp.append('cookie_id', params.cookie_id);
+  if (params?.chat_id) sp.append('chat_id', params.chat_id);
+  if (params?.buyer_id) sp.append('buyer_id', params.buyer_id);
+  if (params?.page) sp.append('page', String(params.page));
+  if (params?.page_size) sp.append('page_size', String(params.page_size));
+  return get(`/api/ai-conversations?${sp.toString()}`);
+};
+
+export const getAIChatList = async (cookieId?: string): Promise<{ success: boolean; data: AIChatSummary[] }> => {
+  const sp = cookieId ? `?cookie_id=${cookieId}` : '';
+  return get(`/api/ai-conversations/chats${sp}`);
+};
+
+// Card Batch Import
+export const batchImportCards = async (items: Array<{
+  name: string; type?: string; text_content?: string; data_content?: string;
+  image_url?: string; description?: string; delay_seconds?: number;
+}>): Promise<{ success: boolean; total: number; success_count: number; fail_count: number; errors: Array<{ row: number; error: string }> }> => {
+  return post('/api/cards/batch-import', { items });
+};
+
+// Item Schedule (智能上下架)
+export const getItemSchedules = async (cookieId?: string, scheduleType?: string): Promise<{ success: boolean; data: ItemSchedule[] }> => {
+  const params = new URLSearchParams();
+  if (cookieId) params.append('cookie_id', cookieId);
+  if (scheduleType) params.append('schedule_type', scheduleType);
+  return get(`/api/item-schedules?${params.toString()}`);
+};
+export const addItemSchedule = async (data: { cookie_id: string; item_id: string; item_title?: string; schedule_type: string; schedule_time: string }): Promise<ApiResponse & { id?: number }> => {
+  return post('/api/item-schedules', data);
+};
+export const updateItemSchedule = async (scheduleId: number, data: Partial<ItemSchedule>): Promise<ApiResponse> => {
+  return put(`/api/item-schedules/${scheduleId}`, data);
+};
+export const deleteItemSchedule = async (scheduleId: number): Promise<ApiResponse> => {
+  return del(`/api/item-schedules/${scheduleId}`);
+};
+
+// Operation Logs
+export const getOperationLogs = async (params?: { cookie_id?: string; log_type?: string; page?: number; page_size?: number }): Promise<{ success: boolean; data: OperationLog[]; total: number; page: number; page_size: number }> => {
+  const sp = new URLSearchParams();
+  if (params?.cookie_id) sp.append('cookie_id', params.cookie_id);
+  if (params?.log_type) sp.append('log_type', params.log_type);
+  if (params?.page) sp.append('page', String(params.page));
+  if (params?.page_size) sp.append('page_size', String(params.page_size));
+  return get(`/api/operation-logs?${sp.toString()}`);
+};
+
+// Daily Quota
+export const getDailyQuota = async (cookieId: string): Promise<{ success: boolean; quota: { auto_reply_count: number; auto_delivery_count: number; date: string }; config: { daily_reply_limit: number; daily_delivery_limit: number } }> => {
+  return get(`/api/daily-quota/${cookieId}`);
+};
+
+export const getQuotaConfig = async (): Promise<{ success: boolean; config: { daily_reply_limit: number; daily_delivery_limit: number } }> => {
+  return get('/api/quota-config');
+};
+
+export const updateQuotaConfig = async (data: { daily_reply_limit?: number; daily_delivery_limit?: number }): Promise<ApiResponse> => {
+  return put('/api/quota-config', data);
 };

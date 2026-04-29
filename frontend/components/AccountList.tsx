@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AccountDetail, AIReplySettings } from '../types';
+import { AccountDetail, AIReplySettings, EvaluationConfig } from '../types';
 import {
   getAccountDetails,
   updateAccountStatus,
@@ -14,15 +14,17 @@ import {
   updateAccountLoginInfo,
   updateAccountAISettings,
   getAllAISettings,
-  getAccountAISettings
+  getAccountAISettings,
+  getEvaluationConfig,
+  updateEvaluationConfig
 } from '../services/api';
 import {
   Plus, Power, Edit2, Trash2, QrCode, X, Check, Loader2,
   MessageSquare, RefreshCw, Save, User, Clock, MessageCircle,
-  Upload, Key, Eye, EyeOff, Bot, Settings
+  Upload, Key, Eye, EyeOff, Bot, Settings, Star
 } from 'lucide-react';
 
-type ModalType = 'edit' | 'ai-settings' | null;
+type ModalType = 'edit' | 'ai-settings' | 'evaluation-config' | null;
 
 const AccountList: React.FC = () => {
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
@@ -54,6 +56,14 @@ const AccountList: React.FC = () => {
     custom_prompts: '',
   });
   const [saving, setSaving] = useState(false);
+
+  // 自动评价配置表单状态
+  const [evalConfig, setEvalConfig] = useState<EvaluationConfig>({
+    auto_evaluate_enabled: false,
+    evaluate_content: '感谢您的购买，欢迎再次光临！',
+    auto_reply_review_enabled: false,
+    reply_review_content: '感谢支持！',
+  });
 
   const loadAccounts = async () => {
     setLoading(true);
@@ -204,6 +214,41 @@ const AccountList: React.FC = () => {
     }
   };
 
+  const openEvalModal = async (account: AccountDetail) => {
+    setEditingAccount(account);
+    setSaving(true);
+    try {
+      const config = await getEvaluationConfig(account.id);
+      setEvalConfig({
+        auto_evaluate_enabled: config.auto_evaluate_enabled ?? false,
+        evaluate_content: config.evaluate_content || '感谢您的购买，欢迎再次光临！',
+        auto_reply_review_enabled: config.auto_reply_review_enabled ?? false,
+        reply_review_content: config.reply_review_content || '感谢支持！',
+      });
+    } catch (e) {
+      console.error('Failed to load evaluation config:', e);
+    } finally {
+      setSaving(false);
+    }
+    setActiveModal('evaluation-config');
+  };
+
+  const handleSaveEvalConfig = async () => {
+    if (!editingAccount) return;
+    setSaving(true);
+
+    try {
+      await updateEvaluationConfig(editingAccount.id, evalConfig);
+      setActiveModal(null);
+      loadAccounts();
+    } catch (error) {
+      console.error('更新评价配置失败:', error);
+      alert('更新失败，请重试');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const startQRLogin = async () => {
     setShowQRModal(true);
     setQrStatus('loading');
@@ -239,8 +284,8 @@ const AccountList: React.FC = () => {
     <div className="space-y-8 animate-fade-in relative">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">账号管理</h2>
-          <p className="text-gray-500 mt-2 font-medium">管理您的闲鱼授权账号及设置。</p>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">账号管理</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">管理您的闲鱼授权账号及设置。</p>
         </div>
         <button
             onClick={startQRLogin}
@@ -278,8 +323,129 @@ const AccountList: React.FC = () => {
                         <span className="px-2.5 py-0.5 rounded-lg bg-purple-100 text-purple-700 text-xs font-bold flex items-center gap-1">
                           <Bot className="w-3 h-3" /> AI
                         </span>
-                    )}
+        )}
+
+      {/* 自动评价配置弹窗 */}
+      {activeModal === 'evaluation-config' && editingAccount && createPortal(
+        <div className="modal-overlay-centered">
+          <div className="modal-container" style={{maxWidth: '600px'}}>
+            <div className="modal-header">
+              <div>
+                <h3 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
+                  <Star className="w-6 h-6 text-yellow-500" />
+                  自动评价设置
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">{editingAccount.nickname || editingAccount.remark || editingAccount.id}</p>
+              </div>
+              <button
+                onClick={() => setActiveModal(null)}
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors flex-shrink-0"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="modal-body space-y-6">
+              {/* 启用自动评价 */}
+              <div className="flex items-center justify-between p-4 bg-yellow-50 rounded-xl">
+                <div>
+                  <div className="font-bold text-gray-900 flex items-center gap-2">
+                    <Star className="w-4 h-4 text-yellow-500" />
+                    启用自动评价
+                  </div>
+                  <div className="text-xs text-gray-500">交易完成后自动给买家好评</div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setEvalConfig({ ...evalConfig, auto_evaluate_enabled: !evalConfig.auto_evaluate_enabled })}
+                  className={`w-14 h-8 rounded-full transition-colors duration-300 relative ${
+                    evalConfig.auto_evaluate_enabled ? 'bg-[#FFE815]' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 ${
+                      evalConfig.auto_evaluate_enabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 评价内容 */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">评价内容</label>
+                <textarea
+                  value={evalConfig.evaluate_content}
+                  onChange={(e) => setEvalConfig({ ...evalConfig, evaluate_content: e.target.value })}
+                  placeholder="输入自动评价的内容"
+                  className="w-full ios-input px-4 py-3 rounded-xl h-24 resize-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">交易完成后自动发送此评价内容</p>
+              </div>
+
+              {/* 分隔线 */}
+              <div className="border-t border-gray-200"></div>
+
+              {/* 启用自动回复评价 */}
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl">
+                <div>
+                  <div className="font-bold text-gray-900 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-blue-500" />
+                    启用自动回复评价
+                  </div>
+                  <div className="text-xs text-gray-500">买家评价后自动回复</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEvalConfig({ ...evalConfig, auto_reply_review_enabled: !evalConfig.auto_reply_review_enabled })}
+                  className={`w-14 h-8 rounded-full transition-colors duration-300 relative ${
+                    evalConfig.auto_reply_review_enabled ? 'bg-[#FFE815]' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-300 ${
+                      evalConfig.auto_reply_review_enabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 回复评价内容 */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">回复评价内容</label>
+                <textarea
+                  value={evalConfig.reply_review_content}
+                  onChange={(e) => setEvalConfig({ ...evalConfig, reply_review_content: e.target.value })}
+                  placeholder="输入自动回复评价的内容"
+                  className="w-full ios-input px-4 py-3 rounded-xl h-24 resize-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">买家评价后自动回复此内容</p>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setActiveModal(null)}
+                  className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                  disabled={saving}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveEvalConfig}
+                  className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                  disabled={saving}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {saving ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
                 <p className="text-sm text-gray-500 font-medium mb-3">{account.remark || account.note || '暂无备注'}</p>
                 <div className="flex gap-2">
                    {account.auto_confirm && <span className="text-xs bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5"><MessageSquare className="w-3 h-3"/> 自动回复</span>}
@@ -301,6 +467,13 @@ const AccountList: React.FC = () => {
                     title="AI设置"
                 >
                     <Bot className="w-5 h-5" />
+                </button>
+                <button
+                    onClick={() => openEvalModal(account)}
+                    className="p-3 rounded-xl hover:bg-yellow-100 transition-colors text-yellow-600"
+                    title="自动评价设置"
+                >
+                    <Star className="w-5 h-5" />
                 </button>
                 <button
                     onClick={() => handleToggle(account.id, account.enabled)}

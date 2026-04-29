@@ -69,6 +69,11 @@ class DBManager:
         try:
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             cursor = self.conn.cursor()
+
+            cursor.execute('PRAGMA journal_mode=WAL;')
+            cursor.execute('PRAGMA synchronous=NORMAL;')
+            cursor.execute('PRAGMA cache_size=-8000;')
+            cursor.execute('PRAGMA busy_timeout=5000;')
             
             # 创建用户表
             cursor.execute('''
@@ -469,6 +474,18 @@ class DBManager:
             )
             ''')
 
+            # 创建每日配额表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_quota (
+                cookie_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                auto_reply_count INTEGER DEFAULT 0,
+                auto_delivery_count INTEGER DEFAULT 0,
+                PRIMARY KEY (cookie_id, date),
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE
+            )
+            ''')
+
             # 插入默认系统设置（不包括管理员密码，由reply_server.py初始化）
             cursor.execute('''
             INSERT OR IGNORE INTO system_settings (key, value, description) VALUES
@@ -502,11 +519,86 @@ class DBManager:
             )
             ''')
 
+            # 创建发货失败重试队列表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS delivery_retry_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cookie_id TEXT NOT NULL,
+                order_id TEXT,
+                item_id TEXT,
+                buyer_id TEXT,
+                buyer_name TEXT DEFAULT '',
+                chat_id TEXT DEFAULT '',
+                quantity INTEGER DEFAULT 1,
+                spec_name TEXT DEFAULT '',
+                spec_value TEXT DEFAULT '',
+                error_type TEXT NOT NULL DEFAULT 'no_match',
+                error_message TEXT DEFAULT '',
+                retry_count INTEGER DEFAULT 0,
+                max_retries INTEGER DEFAULT 5,
+                next_retry_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE
+            )
+            ''')
+
+            # 创建智能上下架计划表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS item_schedule (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cookie_id TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                item_title TEXT DEFAULT '',
+                schedule_type TEXT NOT NULL CHECK (schedule_type IN ('list', 'delist')),
+                schedule_time TEXT,
+                cron_expression TEXT DEFAULT '',
+                enabled BOOLEAN DEFAULT TRUE,
+                last_run_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE
+            )
+            ''')
+
+            # 创建买家黑名单表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS buyer_blacklist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                buyer_id TEXT NOT NULL,
+                buyer_name TEXT DEFAULT '',
+                reason TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(user_id, buyer_id)
+            )
+            ''')
+
+            # 创建自动评价配置表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS evaluation_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cookie_id TEXT NOT NULL,
+                auto_evaluate_enabled BOOLEAN DEFAULT FALSE,
+                evaluate_content TEXT DEFAULT '感谢您的购买，欢迎再次光临！',
+                auto_reply_review_enabled BOOLEAN DEFAULT FALSE,
+                reply_review_content TEXT DEFAULT '感谢支持！',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cookie_id) REFERENCES cookies(id) ON DELETE CASCADE,
+                UNIQUE(cookie_id)
+            )
+            ''')
+
             # 检查并升级数据库
             self.check_and_upgrade_db(cursor)
 
             # 执行数据库迁移
             self._migrate_database(cursor)
+
+            self._create_indexes(cursor)
 
             self.conn.commit()
             logger.info("数据库初始化完成")
@@ -561,8 +653,27 @@ class DBManager:
 
         except Exception as e:
             logger.error(f"数据库迁移失败: {e}")
-            # 迁移失败不应该阻止程序启动
             pass
+
+    def _create_indexes(self, cursor):
+        """创建缺失的性能索引"""
+        try:
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_cookie_id ON orders(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_buyer_id ON orders(buyer_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_conv_cookie_chat ON ai_conversations(cookie_id, chat_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_conv_created ON ai_conversations(created_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_email_ver_email ON email_verifications(email)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_risk_control_cookie ON risk_control_logs(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_keywords_cookie ON keywords(cookie_id, id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_default_reply_records_cookie ON default_reply_records(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_delivery_retry_status ON delivery_retry_queue(status, next_retry_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_delivery_retry_cookie ON delivery_retry_queue(cookie_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_buyer_blacklist_user ON buyer_blacklist(user_id)')
+            logger.info("数据库索引创建/检查完成")
+        except Exception as e:
+            logger.warning(f"创建索引时出现警告: {e}")
 
     def _update_cards_table_constraints(self, cursor):
         """更新cards表的CHECK约束以支持image类型"""
@@ -1369,14 +1480,15 @@ class DBManager:
         with self.lock:
             try:
                 cursor = self.conn.cursor()
-                self._execute_sql(cursor, "SELECT id, value, created_at FROM cookies WHERE id = ?", (cookie_id,))
+                self._execute_sql(cursor, "SELECT id, value, user_id, created_at FROM cookies WHERE id = ?", (cookie_id,))
                 result = cursor.fetchone()
                 if result:
                     return {
                         'id': result[0],
                         'cookies_str': result[1],  # 使用cookies_str字段名以匹配调用方期望
                         'value': result[1],        # 保持向后兼容
-                        'created_at': result[2]
+                        'user_id': result[2],
+                        'created_at': result[3]
                     }
                 return None
             except Exception as e:
@@ -5773,6 +5885,460 @@ class DBManager:
             cursor = self.conn.cursor()
             cursor.execute('DELETE FROM user_sessions WHERE token=?', (token,))
             self.conn.commit()
+
+    def add_delivery_retry(self, cookie_id: str, order_id: str = None, item_id: str = None,
+                           buyer_id: str = None, buyer_name: str = '', chat_id: str = '',
+                           quantity: int = 1, spec_name: str = '', spec_value: str = '',
+                           error_type: str = 'no_match', error_message: str = '') -> int:
+        """添加发货失败重试记录"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT INTO delivery_retry_queue
+                    (cookie_id, order_id, item_id, buyer_id, buyer_name, chat_id,
+                     quantity, spec_name, spec_value, error_type, error_message, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+                ''', (cookie_id, order_id, item_id, buyer_id, buyer_name, chat_id,
+                      quantity, spec_name, spec_value, error_type, error_message))
+                self.conn.commit()
+                retry_id = cursor.lastrowid
+                logger.info(f"发货失败已加入重试队列: id={retry_id}, order={order_id}, 买家={buyer_name}")
+                return retry_id
+        except Exception as e:
+            logger.error(f"添加发货重试记录失败: {e}")
+            return -1
+
+    def get_pending_delivery_retries(self) -> list:
+        """获取需要重试的发货记录"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT * FROM delivery_retry_queue
+                    WHERE status IN ('pending', 'retrying')
+                    AND next_retry_at <= datetime('now', 'localtime')
+                    ORDER BY created_at ASC
+                ''')
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"获取待重试发货记录失败: {e}")
+            return []
+
+    def update_delivery_retry_status(self, retry_id: int, status: str, error_message: str = None,
+                                      increment_retry: bool = True, delay_minutes: int = 5) -> bool:
+        """更新发货重试状态"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                if increment_retry:
+                    cursor.execute('''
+                        UPDATE delivery_retry_queue
+                        SET status = ?, error_message = COALESCE(?, error_message),
+                            retry_count = retry_count + 1,
+                            next_retry_at = datetime('now', 'localtime', ? || ' minutes'),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (status, error_message, f'+{delay_minutes}', retry_id))
+                else:
+                    cursor.execute('''
+                        UPDATE delivery_retry_queue
+                        SET status = ?, error_message = COALESCE(?, error_message),
+                            next_retry_at = datetime('now', 'localtime', ? || ' minutes'),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    ''', (status, error_message, f'+{delay_minutes}', retry_id))
+                self.conn.commit()
+                logger.info(f"发货重试状态更新: id={retry_id}, status={status}")
+                return True
+        except Exception as e:
+            logger.error(f"更新发货重试状态失败: {e}")
+            return False
+
+    def get_delivery_retry_queue(self, cookie_id: str = None, page: int = 1, page_size: int = 20) -> dict:
+        """获取发货重试队列列表"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                where = ''
+                params = []
+                if cookie_id:
+                    where = 'WHERE cookie_id = ?'
+                    params.append(cookie_id)
+
+                cursor.execute(f'SELECT COUNT(*) FROM delivery_retry_queue {where}', params)
+                total = cursor.fetchone()[0]
+
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM delivery_retry_queue {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取发货重试队列失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def delete_delivery_retry(self, retry_id: int) -> bool:
+        """删除发货重试记录"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('DELETE FROM delivery_retry_queue WHERE id = ?', (retry_id,))
+                self.conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"删除发货重试记录失败: {e}")
+            return False
+
+    def add_to_blacklist(self, user_id: int, buyer_id: str, buyer_name: str = '', reason: str = '') -> bool:
+        """添加买家到黑名单"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO buyer_blacklist (user_id, buyer_id, buyer_name, reason)
+                    VALUES (?, ?, ?, ?)
+                ''', (user_id, buyer_id, buyer_name, reason))
+                self.conn.commit()
+                logger.info(f"买家已加入黑名单: user_id={user_id}, buyer_id={buyer_id}")
+                return True
+        except Exception as e:
+            logger.error(f"添加黑名单失败: {e}")
+            return False
+
+    def remove_from_blacklist(self, blacklist_id: int) -> bool:
+        """从黑名单移除"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute('DELETE FROM buyer_blacklist WHERE id = ?', (blacklist_id,))
+                self.conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"移除黑名单失败: {e}")
+            return False
+
+    def get_blacklist(self, user_id: int = None, page: int = 1, page_size: int = 50) -> dict:
+        """获取黑名单列表"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                where = ''
+                params = []
+                if user_id:
+                    where = 'WHERE user_id = ?'
+                    params.append(user_id)
+
+                cursor.execute(f'SELECT COUNT(*) FROM buyer_blacklist {where}', params)
+                total = cursor.fetchone()[0]
+
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM buyer_blacklist {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取黑名单失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def is_buyer_blacklisted(self, user_id: int, buyer_id: str) -> bool:
+        """检查买家是否在黑名单中"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    'SELECT COUNT(*) FROM buyer_blacklist WHERE user_id = ? AND buyer_id = ?',
+                    (user_id, buyer_id)
+                )
+                return cursor.fetchone()[0] > 0
+        except Exception as e:
+            logger.error(f"检查黑名单失败: {e}")
+            return False
+
+    def get_ai_conversations(self, cookie_id: str = None, chat_id: str = None, buyer_id: str = None,
+                             page: int = 1, page_size: int = 20) -> dict:
+        """获取AI对话历史"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                conditions = []
+                params = []
+                if cookie_id:
+                    conditions.append('cookie_id = ?')
+                    params.append(cookie_id)
+                if chat_id:
+                    conditions.append('chat_id = ?')
+                    params.append(chat_id)
+                if buyer_id:
+                    conditions.append('user_id = ?')
+                    params.append(buyer_id)
+                
+                where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+                
+                cursor.execute(f'SELECT COUNT(*) FROM ai_conversations {where}', params)
+                total = cursor.fetchone()[0]
+                
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM ai_conversations {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取AI对话历史失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def get_ai_conversation_chats(self, cookie_id: str = None) -> list:
+        """获取有对话的chat_id列表（用于筛选）"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                if cookie_id:
+                    cursor.execute('''
+                        SELECT DISTINCT chat_id, user_id, COUNT(*) as msg_count, 
+                               MAX(created_at) as last_msg
+                        FROM ai_conversations WHERE cookie_id = ?
+                        GROUP BY chat_id ORDER BY last_msg DESC LIMIT 50
+                    ''', (cookie_id,))
+                else:
+                    cursor.execute('''
+                        SELECT DISTINCT chat_id, user_id, COUNT(*) as msg_count,
+                               MAX(created_at) as last_msg
+                        FROM ai_conversations
+                        GROUP BY chat_id ORDER BY last_msg DESC LIMIT 50
+                    ''')
+                rows = cursor.fetchall()
+                columns = ['chat_id', 'buyer_id', 'msg_count', 'last_msg']
+                return [dict(zip(columns, row)) for row in rows]
+        except Exception as e:
+            logger.error(f"获取对话列表失败: {e}")
+            return []
+
+    def get_evaluation_config(self, cookie_id: str) -> dict:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT * FROM evaluation_config WHERE cookie_id = ?', (cookie_id,))
+            row = cursor.fetchone()
+            if row:
+                columns = [d[0] for d in cursor.description]
+                return dict(zip(columns, row))
+            return {'auto_evaluate_enabled': False, 'evaluate_content': '感谢您的购买，欢迎再次光临！', 'auto_reply_review_enabled': False, 'reply_review_content': '感谢支持！'}
+
+    def update_evaluation_config(self, cookie_id: str, data: dict) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO evaluation_config (cookie_id, auto_evaluate_enabled, evaluate_content, auto_reply_review_enabled, reply_review_content)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(cookie_id) DO UPDATE SET
+                    auto_evaluate_enabled = excluded.auto_evaluate_enabled,
+                    evaluate_content = excluded.evaluate_content,
+                    auto_reply_review_enabled = excluded.auto_reply_review_enabled,
+                    reply_review_content = excluded.reply_review_content,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (cookie_id, data.get('auto_evaluate_enabled', False), data.get('evaluate_content', ''),
+                  data.get('auto_reply_review_enabled', False), data.get('reply_review_content', '')))
+            self.conn.commit()
+            return True
+
+    def get_item_schedules(self, cookie_id: str = None, schedule_type: str = None) -> list:
+        with self.lock:
+            cursor = self.conn.cursor()
+            conditions = []
+            params = []
+            if cookie_id:
+                conditions.append('cookie_id = ?')
+                params.append(cookie_id)
+            if schedule_type:
+                conditions.append('schedule_type = ?')
+                params.append(schedule_type)
+            where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+            cursor.execute(f'SELECT * FROM item_schedule {where} ORDER BY created_at DESC', params)
+            rows = cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+
+    def add_item_schedule(self, cookie_id: str, item_id: str, item_title: str,
+                          schedule_type: str, schedule_time: str = '', cron_expression: str = '') -> int:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO item_schedule (cookie_id, item_id, item_title, schedule_type, schedule_time, cron_expression)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (cookie_id, item_id, item_title, schedule_type, schedule_time, cron_expression))
+            self.conn.commit()
+            return cursor.lastrowid
+
+    def update_item_schedule(self, schedule_id: int, data: dict) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            fields = []
+            params = []
+            for key in ['schedule_time', 'cron_expression', 'enabled', 'schedule_type']:
+                if key in data:
+                    fields.append(f'{key} = ?')
+                    params.append(data[key])
+            if not fields:
+                return False
+            fields.append('updated_at = CURRENT_TIMESTAMP')
+            params.append(schedule_id)
+            cursor.execute(f"UPDATE item_schedule SET {', '.join(fields)} WHERE id = ?", params)
+            self.conn.commit()
+            return True
+
+    def delete_item_schedule(self, schedule_id: int) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('DELETE FROM item_schedule WHERE id = ?', (schedule_id,))
+            self.conn.commit()
+            return True
+
+    def get_pending_schedules(self) -> list:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                SELECT * FROM item_schedule
+                WHERE enabled = 1
+                AND schedule_time IS NOT NULL
+                AND schedule_time != ''
+                AND schedule_time <= datetime('now', 'localtime')
+                AND (last_run_at IS NULL OR last_run_at < schedule_time)
+            ''')
+            rows = cursor.fetchall()
+            columns = [d[0] for d in cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+
+    def mark_schedule_run(self, schedule_id: int) -> bool:
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute('UPDATE item_schedule SET last_run_at = CURRENT_TIMESTAMP WHERE id = ?', (schedule_id,))
+            self.conn.commit()
+            return True
+
+    def get_operation_logs(self, cookie_id: str = None, log_type: str = None,
+                           page: int = 1, page_size: int = 50) -> dict:
+        """获取操作日志"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                conditions = []
+                params = []
+                if cookie_id:
+                    conditions.append('cookie_id = ?')
+                    params.append(cookie_id)
+                if log_type:
+                    conditions.append('event_type = ?')
+                    params.append(log_type)
+
+                where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+
+                cursor.execute(f'SELECT COUNT(*) FROM risk_control_logs {where}', params)
+                total = cursor.fetchone()[0]
+
+                offset = (page - 1) * page_size
+                cursor.execute(f'''
+                    SELECT * FROM risk_control_logs {where}
+                    ORDER BY created_at DESC LIMIT ? OFFSET ?
+                ''', params + [page_size, offset])
+                rows = cursor.fetchall()
+                columns = [d[0] for d in cursor.description]
+                return {
+                    'data': [dict(zip(columns, row)) for row in rows],
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size
+                }
+        except Exception as e:
+            logger.error(f"获取操作日志失败: {e}")
+            return {'data': [], 'total': 0, 'page': page, 'page_size': page_size}
+
+    def get_daily_quota(self, cookie_id: str) -> dict:
+        """获取当日操作计数"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                today = time.strftime('%Y-%m-%d')
+                cursor.execute('''
+                    SELECT auto_reply_count, auto_delivery_count
+                    FROM daily_quota WHERE cookie_id = ? AND date = ?
+                ''', (cookie_id, today))
+                row = cursor.fetchone()
+                if row:
+                    return {'auto_reply_count': row[0], 'auto_delivery_count': row[1], 'date': today}
+                return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
+        except:
+            return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
+
+    def increment_daily_quota(self, cookie_id: str, quota_type: str) -> dict:
+        """增加当日操作计数"""
+        try:
+            with self.lock:
+                cursor = self.conn.cursor()
+                today = time.strftime('%Y-%m-%d')
+                field = 'auto_reply_count' if quota_type == 'reply' else 'auto_delivery_count'
+                cursor.execute(f'''
+                    INSERT INTO daily_quota (cookie_id, date, auto_reply_count, auto_delivery_count)
+                    VALUES (?, ?, 0, 0)
+                    ON CONFLICT(cookie_id, date) DO UPDATE SET
+                        {field} = {field} + 1
+                ''', (cookie_id, today))
+                self.conn.commit()
+                return self.get_daily_quota(cookie_id)
+        except:
+            return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
+
+    def get_quota_config(self) -> dict:
+        """获取配额配置"""
+        with self.lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT value FROM system_settings WHERE key = 'daily_reply_limit'")
+            reply_limit = cursor.fetchone()
+            cursor.execute("SELECT value FROM system_settings WHERE key = 'daily_delivery_limit'")
+            delivery_limit = cursor.fetchone()
+            return {
+                'daily_reply_limit': int(reply_limit[0]) if reply_limit else 200,
+                'daily_delivery_limit': int(delivery_limit[0]) if delivery_limit else 100
+            }
+
+    def check_daily_quota(self, cookie_id: str, quota_type: str) -> tuple:
+        """检查是否超出配额，返回(是否允许, 当前计数, 上限)"""
+        config = self.get_quota_config()
+        quota = self.get_daily_quota(cookie_id)
+
+        if quota_type == 'reply':
+            current = quota['auto_reply_count']
+            limit = config['daily_reply_limit']
+        else:
+            current = quota['auto_delivery_count']
+            limit = config['daily_delivery_limit']
+
+        allowed = current < limit
+        return (allowed, current, limit)
 
     def cleanup_expired_sessions(self):
         with self.lock:

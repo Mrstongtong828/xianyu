@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Query
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -26,6 +26,7 @@ from ai_reply_engine import ai_reply_engine
 from utils.qr_login import qr_login_manager
 from utils.xianyu_utils import trans_cookies
 from utils.image_utils import image_manager
+from utils.rate_limiter import rate_limit
 
 from loguru import logger
 
@@ -42,7 +43,7 @@ KEYWORDS_FILE = Path(__file__).parent / "回复关键字.txt"
 
 # 简单的用户认证配置
 ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin123"  # 系统初始化时的默认密码
+DEFAULT_ADMIN_PASSWORD = os.getenv('ADMIN_DEFAULT_PASSWORD', None) or secrets.token_urlsafe(16)
 SESSION_TOKENS = {}  # 保留兼容性，实际存储已迁移至SQLite user_sessions 表
 TOKEN_EXPIRE_TIME = 24 * 60 * 60  # token过期时间：24小时
 
@@ -483,10 +484,64 @@ async def register_route():
 # 文件末尾的 catch-all 路由会处理前端页面的直接访问
 
 
+# ==================== 智能上下架 API ====================
+
+class ItemScheduleRequest(BaseModel):
+    cookie_id: str
+    item_id: str
+    item_title: str = ''
+    schedule_type: str = 'list'
+    schedule_time: str = ''
+    cron_expression: str = ''
+
+@app.get("/api/item-schedules")
+async def get_item_schedules(
+    cookie_id: Optional[str] = None,
+    schedule_type: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    schedules = db_manager.get_item_schedules(cookie_id=cookie_id, schedule_type=schedule_type)
+    return {"success": True, "data": schedules}
+
+@app.post("/api/item-schedules")
+async def add_item_schedule(
+    data: ItemScheduleRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    schedule_id = db_manager.add_item_schedule(
+        data.cookie_id, data.item_id, data.item_title,
+        data.schedule_type, data.schedule_time, data.cron_expression
+    )
+    if schedule_id:
+        return {"success": True, "message": "计划已添加", "id": schedule_id}
+    raise HTTPException(status_code=500, detail="添加失败")
+
+@app.put("/api/item-schedules/{schedule_id}")
+async def update_item_schedule(
+    schedule_id: int,
+    data: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    success = db_manager.update_item_schedule(schedule_id, data)
+    if success:
+        return {"success": True, "message": "已更新"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+@app.delete("/api/item-schedules/{schedule_id}")
+async def delete_item_schedule(
+    schedule_id: int,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    success = db_manager.delete_item_schedule(schedule_id)
+    if success:
+        return {"success": True, "message": "已删除"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+
 
 # 登录接口
 @app.post('/login')
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, _rate=Depends(rate_limit(max_requests=10))):
     from db_manager import db_manager
 
     # 判断登录方式
@@ -711,7 +766,7 @@ async def check_default_password(current_user: Dict[str, Any] = Depends(get_curr
 
 # 生成图形验证码接口
 @app.post('/generate-captcha')
-async def generate_captcha(request: CaptchaRequest):
+async def generate_captcha(request: CaptchaRequest, _rate=Depends(rate_limit(max_requests=20))):
     from db_manager import db_manager
 
     try:
@@ -954,7 +1009,7 @@ async def geetest_validate(request: GeetestValidateRequest):
 
 # 发送验证码接口（需要先验证图形验证码）
 @app.post('/send-verification-code')
-async def send_verification_code(request: SendCodeRequest):
+async def send_verification_code(request: SendCodeRequest, _rate=Depends(rate_limit(max_requests=3))):
     from db_manager import db_manager
 
     try:
@@ -1022,7 +1077,7 @@ async def send_verification_code(request: SendCodeRequest):
 
 # 用户注册接口
 @app.post('/register')
-async def register(request: RegisterRequest):
+async def register(request: RegisterRequest, _rate=Depends(rate_limit(max_requests=5))):
     from db_manager import db_manager
 
     # 检查注册是否开启
@@ -1901,7 +1956,8 @@ async def _execute_password_login(session_id: str, account_id: str, account: str
 @app.post("/password-login")
 async def password_login(
     request: Dict[str, Any],
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    _rate=Depends(rate_limit(max_requests=10)),
 ):
     """账号密码登录接口（异步，支持人脸认证）"""
     try:
@@ -2707,6 +2763,102 @@ def delete_default_reply_compat(cid: str, current_user: Dict[str, Any] = Depends
 def clear_default_reply_records_compat(cid: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """清空指定账号的默认回复记录（兼容路由）"""
     return clear_default_reply_records(cid, current_user)
+
+
+# ------------------------- 飞书命令回调（远程控制机器人）-------------------------
+
+@app.post('/api/feishu/command')
+async def feishu_command_callback(request: Request):
+    """接收飞书 Outgoing Webhook 回调，执行远程命令
+
+    支持的命令：
+    - 恢复全部                 → 恢复所有账号暂停
+    - 恢复 [cookie_id]        → 恢复指定账号所有暂停
+    - 暂停 [cookie_id] [分钟]  → 暂停指定账号
+    - 状态                     → 查看当前暂停状态
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({'msg': 'invalid json'}, status_code=400)
+
+    challenge = body.get('challenge', '')
+    if challenge:
+        return JSONResponse({'challenge': challenge})
+
+    FEISHU_TOKEN = os.getenv('FEISHU_COMMAND_TOKEN', '')
+    if FEISHU_TOKEN and body.get('token', '') != FEISHU_TOKEN:
+        return JSONResponse({'msg': 'unauthorized'}, status_code=403)
+
+    event = body.get('event', {})
+    raw_text = event.get('text', '').strip()
+    if not raw_text:
+        header = body.get('header', {})
+        raw_text = str(header.get('event_type', ''))
+
+    import re
+    clean_text = re.sub(r'<at[^>]*>', '', raw_text).strip()
+    logger.info(f"飞书命令回调: {clean_text[:200]}")
+
+    reply = _handle_feishu_command(clean_text)
+    return JSONResponse({'msg': reply})
+
+
+@app.get('/api/feishu/command')
+async def feishu_verify_url(request: Request):
+    challenge = request.query_params.get('challenge', '')
+    return JSONResponse({'challenge': challenge})
+
+
+def _handle_feishu_command(text: str) -> str:
+    if not text:
+        return "支持的命令: 恢复全部 | 恢复 [账号ID] | 状态"
+
+    if text.startswith('恢复全部') or text.startswith('恢复所有'):
+        try:
+            from XianyuAutoAsync import pause_manager
+            count = pause_manager.resume_all()
+            return f"已恢复全部 {count} 个对话的自动回复"
+        except Exception as e:
+            return f"恢复失败: {e}"
+
+    if text.startswith('恢复') or text.startswith('resume'):
+        parts = text.split()
+        if len(parts) >= 2:
+            try:
+                from XianyuAutoAsync import pause_manager
+                paused = pause_manager.get_paused_chats()
+                resumed = len(paused)
+                pause_manager.resume_all()
+                return f"已恢复 {resumed} 个对话的自动回复"
+            except Exception as e:
+                return f"恢复失败: {e}"
+        return "命令格式: 恢复 [账号ID]"
+
+    if text.startswith('暂停'):
+        parts = text.split()
+        if len(parts) >= 2:
+            cookie_id = parts[1].strip()
+            minutes = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 60
+            try:
+                from db_manager import db_manager
+                db_manager.update_cookie_pause_duration(cookie_id, minutes)
+                return f"已设置账号 {cookie_id} 暂停时间为 {minutes} 分钟"
+            except Exception as e:
+                return f"设置失败: {e}"
+        return "命令格式: 暂停 [账号ID] [分钟]"
+
+    if text.startswith('状态') or text.startswith('status'):
+        try:
+            from XianyuAutoAsync import pause_manager
+            paused = pause_manager.get_paused_chats()
+            if not paused:
+                return "当前没有暂停中的对话"
+            return f"当前暂停中: {len(paused)} 个对话"
+        except Exception as e:
+            return f"获取状态失败: {e}"
+
+    return "支持的命令:\n恢复全部 | 恢复 [账号ID] | 暂停 [账号ID] [分钟] | 状态"
 
 
 # ------------------------- 通知渠道管理接口 -------------------------
@@ -7138,6 +7290,234 @@ async def import_orders(
         log_with_user('error', f"导入订单失败: {str(e)}", current_user)
         raise HTTPException(status_code=500, detail=f"导入订单失败: {str(e)}")
 
+
+# ==================== 黑名单 API ====================
+
+class BlacklistAddRequest(BaseModel):
+    buyer_id: str
+    buyer_name: str = ''
+    reason: str = ''
+
+
+@app.get("/api/blacklist")
+async def get_blacklist(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取黑名单列表"""
+    user_id = current_user.get('user_id', 0)
+    result = db_manager.get_blacklist(user_id=user_id, page=page, page_size=page_size)
+    return {"success": True, **result}
+
+
+@app.post("/api/blacklist")
+async def add_to_blacklist(
+    data: BlacklistAddRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """添加买家到黑名单"""
+    user_id = current_user.get('user_id', 0)
+    success = db_manager.add_to_blacklist(
+        user_id=user_id, buyer_id=data.buyer_id,
+        buyer_name=data.buyer_name, reason=data.reason
+    )
+    if success:
+        return {"success": True, "message": "已添加到黑名单"}
+    raise HTTPException(status_code=500, detail="添加失败")
+
+
+@app.delete("/api/blacklist/{blacklist_id}")
+async def remove_from_blacklist(blacklist_id: int, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """从黑名单移除"""
+    success = db_manager.remove_from_blacklist(blacklist_id)
+    if success:
+        return {"success": True, "message": "已移除"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+
+# ==================== 发货重试队列 API ====================
+
+class DeliveryRetryQuery(BaseModel):
+    cookie_id: Optional[str] = None
+    page: int = 1
+    page_size: int = 20
+
+@app.get("/api/delivery-retry-queue")
+async def get_delivery_retry_queue(
+    cookie_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取发货重试队列"""
+    result = db_manager.get_delivery_retry_queue(cookie_id=cookie_id, page=page, page_size=page_size)
+    return {"success": True, **result}
+
+
+@app.post("/api/delivery-retry-queue/{retry_id}/retry")
+async def retry_delivery(retry_id: int, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """手动重试发货"""
+    db_manager.update_delivery_retry_status(
+        retry_id, 'pending', '手动触发重试',
+        increment_retry=False, delay_minutes=0
+    )
+    return {"success": True, "message": "已加入重试"}
+
+
+@app.delete("/api/delivery-retry-queue/{retry_id}")
+async def delete_delivery_retry(retry_id: int, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """删除发货重试记录"""
+    success = db_manager.delete_delivery_retry(retry_id)
+    if success:
+        return {"success": True, "message": "已删除"}
+    raise HTTPException(status_code=404, detail="记录不存在")
+
+
+# ==================== 批量卡券导入 ====================
+
+class BatchCardImportItem(BaseModel):
+    name: str
+    type: str = 'text'
+    text_content: str = ''
+    data_content: str = ''
+    image_url: str = ''
+    description: str = ''
+    delay_seconds: int = 0
+
+class BatchCardImportRequest(BaseModel):
+    items: List[BatchCardImportItem]
+
+@app.post("/api/cards/batch-import")
+async def batch_import_cards(
+    request: BatchCardImportRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """批量导入卡券"""
+    if not request.items:
+        raise HTTPException(status_code=400, detail="导入数据为空")
+
+    user_id = current_user.get('user_id', 1)
+    success_count = 0
+    fail_count = 0
+    errors = []
+
+    for i, item in enumerate(request.items):
+        try:
+            if not item.name.strip():
+                errors.append({'row': i + 1, 'error': '卡券名称为空'})
+                fail_count += 1
+                continue
+
+            card_type = item.type if item.type in ('text', 'data', 'image', 'api') else 'text'
+
+            db_manager.create_card(
+                name=item.name.strip(),
+                card_type=card_type,
+                text_content=item.text_content or '',
+                data_content=item.data_content or '',
+                image_url=item.image_url or '',
+                description=item.description or '',
+                delay_seconds=item.delay_seconds,
+                user_id=user_id
+            )
+            success_count += 1
+        except Exception as e:
+            errors.append({'row': i + 1, 'error': str(e)[:200]})
+            fail_count += 1
+
+    return {
+        "success": True,
+        "total": len(request.items),
+        "success_count": success_count,
+        "fail_count": fail_count,
+        "errors": errors[:20]
+    }
+
+
+# ==================== AI对话历史 API ====================
+
+@app.get("/api/ai-conversations")
+async def get_ai_conversations(
+    cookie_id: Optional[str] = None,
+    chat_id: Optional[str] = None,
+    buyer_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取AI对话历史"""
+    result = db_manager.get_ai_conversations(
+        cookie_id=cookie_id, chat_id=chat_id, buyer_id=buyer_id,
+        page=page, page_size=page_size
+    )
+    return {"success": True, **result}
+
+@app.get("/api/ai-conversations/chats")
+async def get_ai_conversation_chats(
+    cookie_id: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取对话列表（用于筛选）"""
+    chats = db_manager.get_ai_conversation_chats(cookie_id=cookie_id)
+    return {"success": True, "data": chats}
+
+# ==================== 自动评价 API ====================
+
+@app.get("/api/evaluation-config/{cookie_id}")
+async def get_evaluation_config(cookie_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    config = db_manager.get_evaluation_config(cookie_id)
+    return {"success": True, "data": config}
+
+@app.put("/api/evaluation-config/{cookie_id}")
+async def update_evaluation_config(cookie_id: str, data: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_current_user)):
+    success = db_manager.update_evaluation_config(cookie_id, data)
+    if success:
+        return {"success": True, "message": "配置已更新"}
+    raise HTTPException(status_code=500, detail="更新失败")
+
+# ==================== 操作日志 API ====================
+
+@app.get("/api/operation-logs")
+async def get_operation_logs(
+    cookie_id: Optional[str] = None,
+    log_type: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """获取操作日志"""
+    result = db_manager.get_operation_logs(
+        cookie_id=cookie_id, log_type=log_type,
+        page=page, page_size=page_size
+    )
+    return {"success": True, **result}
+
+# ==================== 每日配额 API ====================
+
+@app.get("/api/daily-quota/{cookie_id}")
+async def get_daily_quota(cookie_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
+    quota = db_manager.get_daily_quota(cookie_id)
+    config = db_manager.get_quota_config()
+    return {"success": True, "quota": quota, "config": config}
+
+@app.get("/api/quota-config")
+async def get_quota_config(current_user: Dict[str, Any] = Depends(get_current_user)):
+    config = db_manager.get_quota_config()
+    return {"success": True, "config": config}
+
+@app.put("/api/quota-config")
+async def update_quota_config(data: Dict[str, Any], current_user: Dict[str, Any] = Depends(get_current_user)):
+    with db_manager.lock:
+        cursor = db_manager.conn.cursor()
+        for key in ['daily_reply_limit', 'daily_delivery_limit']:
+            if key in data:
+                cursor.execute('''
+                    INSERT INTO system_settings (key, value, description) VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                ''', (key, str(data[key]), '每日配额限制'))
+        db_manager.conn.commit()
+    return {"success": True, "message": "配额配置已更新"}
 
 # ==================== 前端 SPA Catch-All 路由 ====================
 # 必须放在所有 API 路由之后，用于处理前端 SPA 的直接访问
