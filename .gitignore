@@ -12,3 +12,4 @@ static/uploads/images/
 *.pyc
 .env
 *.db
+global_config.yml
