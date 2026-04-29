@@ -312,7 +312,7 @@ class QRLoginManager:
             logger.info(f"开始监控二维码状态: {session_id}")
 
             # 监控登录状态
-            max_wait_time = 300  # 5分钟
+            max_wait_time = 600  # 10分钟（含人脸验证时间）
             start_time = time.time()
 
             while time.time() - start_time < max_wait_time:
@@ -339,17 +339,19 @@ class QRLoginManager:
                             .get("iframeRedirect")
                             is True
                         ):
-                            # 账号被风控，需要手机验证
-                            session.status = 'verification_required'
-                            iframe_url = (
-                                resp.json()
-                                .get("content", {})
-                                .get("data", {})
-                                .get("iframeRedirectUrl")
-                            )
-                            session.verification_url = iframe_url
-                            logger.warning(f"账号被风控，需要手机验证: {session_id}, URL: {iframe_url}")
-                            break
+                            # 账号被风控，需要人脸/手机验证，继续轮询等待验证完成
+                            if session.status != 'verification_required':
+                                iframe_url = (
+                                    resp.json()
+                                    .get("content", {})
+                                    .get("data", {})
+                                    .get("iframeRedirectUrl")
+                                )
+                                session.status = 'verification_required'
+                                session.verification_url = iframe_url
+                                logger.warning(f"账号被风控，需要验证: {session_id}, URL: {iframe_url}")
+                            await asyncio.sleep(0.8)
+                            continue
                         else:
                             # 登录成功
                             session.status = 'success'
