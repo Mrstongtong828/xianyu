@@ -8,7 +8,8 @@ logs/
 trajectory_history/
 realtime.log
 persona.txt
-static/uploads/images/
+static/uploads/
+static/assets/
 *.pyc
 .env
 *.db
