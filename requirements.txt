@@ -37,8 +37,9 @@ openai>=1.50.0
 # ==================== 图像处理 ====================
 Pillow>=10.0.0
 qrcode[pil]>=7.4.2
-paddlepaddle>=2.6.0
-paddleocr>=2.7.0
+# paddlepaddle 和 paddleocr 暂不支持 Python 3.14，如需 OCR 功能请用 Python 3.11
+# paddlepaddle>=2.6.0
+# paddleocr>=2.7.0
 
 # ==================== 浏览器自动化 ====================
 playwright>=1.40.0

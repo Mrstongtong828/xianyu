@@ -10,6 +10,17 @@ import sys
 import shutil
 from pathlib import Path
 
+# 自动安装缺失的核心依赖
+try:
+    import uvicorn, fastapi, aiohttp, loguru
+    import playwright.async_api  # noqa
+except ImportError:
+    print("[INFO] 检测到缺少依赖，正在自动安装（首次运行需要几分钟）...")
+    req = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt')
+    os.system(f'"{sys.executable}" -m pip install -r "{req}"')
+    print("[INFO] 安装完成，请重新运行程序。")
+    sys.exit(0)
+
 # 设置标准输出编码为UTF-8（Windows兼容）
 def _setup_console_encoding():
     """设置控制台编码为UTF-8，避免Windows GBK编码问题"""
@@ -736,6 +747,11 @@ async def main():
     print("启动 API 服务线程...")
     threading.Thread(target=_start_api_server, daemon=True).start()
     print("API 服务线程已启动")
+
+    # 延迟打开浏览器，等待服务器就绪
+    import webbrowser
+    port = int(os.getenv('API_PORT', AUTO_REPLY.get('api', {}).get('port', 8080)))
+    threading.Timer(3.0, lambda: webbrowser.open(f'http://127.0.0.1:{port}')).start()
 
     # 阻塞保持运行，直到收到关闭信号
     print("主程序启动完成，保持运行...")

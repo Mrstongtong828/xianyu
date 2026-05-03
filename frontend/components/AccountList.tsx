@@ -273,6 +273,8 @@ const AccountList: React.FC = () => {
               setShowQRModal(false);
               loadAccounts();
             }, 1000);
+          } else if (statusRes.status === 'verification_required') {
+            setQrStatus('verification');
           } else if (statusRes.status === 'expired' || statusRes.status === 'error') {
             clearInterval(interval);
             setQrStatus('error');
@@ -533,6 +535,12 @@ const AccountList: React.FC = () => {
                                          <Check className="w-8 h-8" />
                                       </div>
                                       <span className="font-bold text-lg">登录成功</span>
+                                  </div>
+                              )}
+                              {qrStatus === 'verification' && (
+                                  <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center text-orange-500 animate-fade-in">
+                                      <Loader2 className="w-10 h-10 animate-spin mb-3" />
+                                      <span className="font-bold text-sm text-center px-4">请在手机上完成人脸验证，验证后自动登录</span>
                                   </div>
                               )}
                               {qrStatus === 'error' && (

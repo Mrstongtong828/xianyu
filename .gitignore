@@ -8,9 +8,11 @@ logs/
 trajectory_history/
 realtime.log
 persona.txt
-static/uploads/images/
+static/uploads/
+static/assets/
 *.pyc
 data/.sensitive_key
 data/.admin_default_password
 .env
 *.db
+global_config.yml
