@@ -1,0 +1,5 @@
+名称,类型,内容,描述,延时秒数
+示例文本卡,text,这是卡券内容,这是描述文字,0
+批量数据卡,data,数据内容可以多行,数据类型的卡券,5
+图片卡券,image,https://example.com/img.png,这是图片卡券,0
+API接口卡,api,https://api.example.com/card,API类型的卡券,3

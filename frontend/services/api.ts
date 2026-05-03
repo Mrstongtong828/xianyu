@@ -4,7 +4,7 @@ import {
   AdminStats, Card, SystemSettings, ApiResponse, OrderAnalytics,
   Item, AIReplySettings, ShippingRule, ReplyRule, DefaultReply,
   BlacklistEntry, DeliveryRetryEntry, EvaluationConfig, ItemSchedule,
-  AIConversation, AIChatSummary, OperationLog
+  AIConversation, AIChatSummary, OperationLog, ActiveOutreachRecord
 } from '../types';
 
 // Auth
@@ -101,7 +101,7 @@ export const getOrders = async (
   if (cookieId) params.cookie_id = cookieId;
   if (status && status !== 'all') params.status = status;
 
-  const res = await get<any>('/api/orders', params);
+  const res = await get<any>('/api/orders', { params });
 
   // Handle backend response variations
   const orders = res.orders || res.data || [];
@@ -581,4 +581,17 @@ export const getQuotaConfig = async (): Promise<{ success: boolean; config: { da
 
 export const updateQuotaConfig = async (data: { daily_reply_limit?: number; daily_delivery_limit?: number }): Promise<ApiResponse> => {
   return put('/api/quota-config', data);
+};
+
+// Active Outreach (主动询价)
+export const initiateActiveOutreach = async (data: { cookie_id: string; item_url: string; custom_message?: string }): Promise<{ success: boolean; message: string; record_id?: number }> => {
+  return post('/api/active-outreach/initiate', data);
+};
+
+export const getActiveOutreachHistory = async (params?: { cookie_id?: string; page?: number; page_size?: number }): Promise<{ success: boolean; data: ActiveOutreachRecord[]; total: number; page: number; page_size: number }> => {
+  const sp = new URLSearchParams();
+  if (params?.cookie_id) sp.append('cookie_id', params.cookie_id);
+  if (params?.page) sp.append('page', String(params.page));
+  if (params?.page_size) sp.append('page_size', String(params.page_size));
+  return get(`/api/active-outreach/history?${sp.toString()}`);
 };

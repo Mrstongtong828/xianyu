@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Item, AccountDetail } from '../types';
 import { getItems, getAccountDetails, syncItemsFromAccount } from '../services/api';
 import { Box, RefreshCw, ShoppingBag, Edit, Trash2, Plus, Save, X, Eye, EyeOff } from 'lucide-react';
 
 const ItemList: React.FC = () => {
+  const STORAGE_KEY = 'item_list_form';
+  const savedForm = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+
   const [items, setItems] = useState<Item[]>([]);
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [selectedAccount, setSelectedAccount] = useState<string>(savedForm.selectedAccount || '');
   const [loading, setLoading] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -21,6 +25,10 @@ const ItemList: React.FC = () => {
     is_multi_spec: false,
     is_multi_qty_ship: false
   });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ selectedAccount }));
+  }, [selectedAccount]);
 
   useEffect(() => {
     getAccountDetails().then(setAccounts);
@@ -222,6 +230,204 @@ const ItemList: React.FC = () => {
              </div>
           )}
       </div>
+
+      {/* 添加商品弹窗 */}
+      {showAddModal && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full overflow-hidden animate-scale-in">
+            <div className="bg-gradient-to-r from-gray-800 to-gray-900 p-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                    <Plus className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-black text-white">添加商品</h3>
+                </div>
+                <button onClick={() => setShowAddModal(false)} className="p-3 bg-white/20 rounded-2xl hover:bg-white/30 transition-colors">
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+            <div className="p-8 space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">选择账号 <span className="text-red-500">*</span></label>
+                <select
+                  value={addForm.cookie_id}
+                  onChange={e => setAddForm({ ...addForm, cookie_id: e.target.value })}
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                >
+                  <option value="">请选择账号</option>
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.nickname || acc.id}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品ID <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={addForm.item_id}
+                  onChange={e => setAddForm({ ...addForm, item_id: e.target.value })}
+                  placeholder="闲鱼商品ID"
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品标题</label>
+                <input
+                  type="text"
+                  value={addForm.item_title}
+                  onChange={e => setAddForm({ ...addForm, item_title: e.target.value })}
+                  placeholder="商品标题（可选）"
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品价格</label>
+                <input
+                  type="text"
+                  value={addForm.item_price}
+                  onChange={e => setAddForm({ ...addForm, item_price: e.target.value })}
+                  placeholder="如 9.9"
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品图片URL</label>
+                <input
+                  type="text"
+                  value={addForm.item_image}
+                  onChange={e => setAddForm({ ...addForm, item_image: e.target.value })}
+                  placeholder="https://..."
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addForm.is_multi_spec}
+                    onChange={e => setAddForm({ ...addForm, is_multi_spec: e.target.checked })}
+                    className="w-4 h-4 rounded accent-[#FFE815]"
+                  />
+                  <span className="text-sm font-bold text-gray-700">多规格</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addForm.is_multi_qty_ship}
+                    onChange={e => setAddForm({ ...addForm, is_multi_qty_ship: e.target.checked })}
+                    className="w-4 h-4 rounded accent-[#FFE815]"
+                  />
+                  <span className="text-sm font-bold text-gray-700">多数量发货</span>
+                </label>
+              </div>
+            </div>
+            <div className="p-8 bg-gray-50 border-t border-gray-100 flex gap-4">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 py-4 rounded-2xl font-bold bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAddItem}
+                className="flex-1 py-4 rounded-2xl font-bold bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-gray-700 hover:to-gray-800 transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                添加商品
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 编辑商品弹窗 */}
+      {showEditModal && selectedItem && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-lg w-full overflow-hidden animate-scale-in">
+            <div className="bg-gradient-to-r from-amber-400 to-amber-500 p-8">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                    <Edit className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-black text-white">编辑商品</h3>
+                </div>
+                <button onClick={() => setShowEditModal(false)} className="p-3 bg-white/20 rounded-2xl hover:bg-white/30 transition-colors">
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+            <div className="p-8 space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品标题</label>
+                <input
+                  type="text"
+                  value={editForm.item_title || ''}
+                  onChange={e => setEditForm({ ...editForm, item_title: e.target.value })}
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品价格</label>
+                <input
+                  type="text"
+                  value={editForm.item_price || ''}
+                  onChange={e => setEditForm({ ...editForm, item_price: e.target.value })}
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品图片URL</label>
+                <input
+                  type="text"
+                  value={editForm.item_image || ''}
+                  onChange={e => setEditForm({ ...editForm, item_image: e.target.value })}
+                  className="w-full ios-input px-4 py-3 rounded-xl"
+                />
+              </div>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_multi_spec || false}
+                    onChange={e => setEditForm({ ...editForm, is_multi_spec: e.target.checked })}
+                    className="w-4 h-4 rounded accent-[#FFE815]"
+                  />
+                  <span className="text-sm font-bold text-gray-700">多规格</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_multi_qty_ship || false}
+                    onChange={e => setEditForm({ ...editForm, is_multi_qty_ship: e.target.checked })}
+                    className="w-4 h-4 rounded accent-[#FFE815]"
+                  />
+                  <span className="text-sm font-bold text-gray-700">多数量发货</span>
+                </label>
+              </div>
+            </div>
+            <div className="p-8 bg-gray-50 border-t border-gray-100 flex gap-4">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="flex-1 py-4 rounded-2xl font-bold bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 py-4 rounded-2xl font-bold bg-gradient-to-r from-amber-400 to-amber-500 text-white hover:from-amber-500 hover:to-amber-600 transition-all flex items-center justify-center gap-2"
+              >
+                <Save className="w-5 h-5" />
+                保存修改
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

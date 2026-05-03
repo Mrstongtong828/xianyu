@@ -30,9 +30,16 @@ interface DefaultReplyForm {
 }
 
 const Keywords: React.FC = () => {
+  const STORAGE_KEY = 'keywords_form';
+  const savedForm = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<TabType>('reply');
+  const [selectedAccount, setSelectedAccount] = useState<string>(savedForm.selectedAccount || '');
+  const [activeTab, setActiveTab] = useState<TabType>(savedForm.activeTab || 'reply');
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ selectedAccount, activeTab }));
+  }, [selectedAccount, activeTab]);
 
   // 关键词回复相关状态
   const [keywords, setKeywords] = useState<Keyword[]>([]);

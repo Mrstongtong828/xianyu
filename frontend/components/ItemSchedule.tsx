@@ -5,6 +5,9 @@ import { getItemSchedules, addItemSchedule, updateItemSchedule, deleteItemSchedu
 import { Clock, Trash2, Loader2, Plus, X, Calendar, ShoppingBag, ToggleLeft, ToggleRight } from 'lucide-react';
 
 const ItemSchedule: React.FC = () => {
+  const STORAGE_KEY = 'item_schedule_form';
+  const savedForm = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+
   const [schedules, setSchedules] = useState<ItemScheduleType[]>([]);
   const [accounts, setAccounts] = useState<AccountDetail[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -12,13 +15,17 @@ const ItemSchedule: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    cookie_id: '',
-    item_id: '',
-    item_title: '',
-    schedule_type: 'list' as 'list' | 'delist',
-    schedule_time: '',
-    cron_expression: ''
+    cookie_id: savedForm.cookie_id || '',
+    item_id: savedForm.item_id || '',
+    item_title: savedForm.item_title || '',
+    schedule_type: (savedForm.schedule_type || 'list') as 'list' | 'delist',
+    schedule_time: savedForm.schedule_time || '',
+    cron_expression: savedForm.cron_expression || ''
   });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
+  }, [form]);
 
   useEffect(() => {
     loadSchedules();
@@ -76,6 +83,7 @@ const ItemSchedule: React.FC = () => {
         cookie_id: '', item_id: '', item_title: '',
         schedule_type: 'list', schedule_time: '', cron_expression: ''
       });
+      localStorage.removeItem(STORAGE_KEY);
       loadSchedules();
     } catch (e) {
       alert('添加失败');

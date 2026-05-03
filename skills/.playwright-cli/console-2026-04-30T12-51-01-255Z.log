@@ -1,0 +1,22 @@
+[    1492ms] [LOG] [options] {commonOptions: Object, captchaOptions: Object, secondVerifyWebOptions: undefined} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:905
+[    1573ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1580ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1610ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1614ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1714ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1750ms] [LOG] %c %s color: yellow; background-color: black; [AppLog WEB SDK] [instance: muye-collector] appid: 2503, userInfo:{"user_unique_id":"7634533916884780550","user_id":"","web_id":"7634533916884780550"} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:885
+[    1750ms] [LOG] %c %s color: yellow; background-color: black; [AppLog WEB SDK] [instance: muye-collector] appid: 2503, sdk is ready, version type is full, version is 5.0.47, you can report now !!! @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:885
+[    1768ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1836ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1836ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1870ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1874ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1878ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    1878ms] [LOG] 本地缓存 {info: Object, event: Object} 远程数据 {} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:851
+[    1878ms] [LOG] 最新的缓存数据 {} {} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:851
+[    2051ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    2052ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    2052ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    2053ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    2879ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570
+[    3179ms] [ERROR] Refused to get unsafe header "x-tt-zhal" @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:570

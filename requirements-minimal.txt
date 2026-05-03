@@ -1,0 +1,16 @@
+# 最小化依赖 - 仅包含启动所需的核心包
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0
+loguru>=0.7.0
+websockets>=10.0,<13.0
+aiohttp>=3.9.0
+requests>=2.31.0
+httpx>=0.25.0
+PyYAML>=6.0.0
+psutil>=5.9.0
+python-multipart>=0.0.6
+openai>=1.50.0
+PyJWT>=2.8.0
+cryptography>=41.0.0
+passlib[bcrypt]>=1.7.4

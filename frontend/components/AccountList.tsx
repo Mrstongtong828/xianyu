@@ -50,6 +50,9 @@ const AccountList: React.FC = () => {
   // AI设置表单状态
   const [aiSettings, setAiSettings] = useState<AIReplySettings>({
     ai_enabled: false,
+    model_name: '',
+    api_key: '',
+    base_url: '',
     max_discount_percent: 10,
     max_discount_amount: 100,
     max_bargain_rounds: 3,
@@ -134,6 +137,9 @@ const AccountList: React.FC = () => {
       const settings = await getAccountAISettings(account.id);
       setAiSettings({
         ai_enabled: settings.ai_enabled ?? false,
+        model_name: settings.model_name ?? '',
+        api_key: settings.api_key ?? '',
+        base_url: settings.base_url ?? '',
         max_discount_percent: settings.max_discount_percent ?? 10,
         max_discount_amount: settings.max_discount_amount ?? 100,
         max_bargain_rounds: settings.max_bargain_rounds ?? 3,
@@ -766,6 +772,46 @@ const AccountList: React.FC = () => {
                     }`}
                   />
                 </button>
+              </div>
+
+              {/* API 配置 */}
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">API 配置</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">API Key <span className="text-red-500">*</span></label>
+                    <input
+                      type="password"
+                      value={aiSettings.api_key}
+                      onChange={(e) => setAiSettings({ ...aiSettings, api_key: e.target.value })}
+                      placeholder="sk-..."
+                      className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">留空则使用系统全局 API Key</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">API 地址</label>
+                    <input
+                      type="text"
+                      value={aiSettings.base_url}
+                      onChange={(e) => setAiSettings({ ...aiSettings, base_url: e.target.value })}
+                      placeholder="https://api.deepseek.com/v1"
+                      className="w-full ios-input px-4 py-3 rounded-xl text-sm"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">留空则使用系统全局 API 地址</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">模型名称</label>
+                    <input
+                      type="text"
+                      value={aiSettings.model_name}
+                      onChange={(e) => setAiSettings({ ...aiSettings, model_name: e.target.value })}
+                      placeholder="deepseek-chat"
+                      className="w-full ios-input px-4 py-3 rounded-xl text-sm"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">留空则使用系统全局模型设置</p>
+                  </div>
+                </div>
               </div>
 
               {/* 砍价策略 */}

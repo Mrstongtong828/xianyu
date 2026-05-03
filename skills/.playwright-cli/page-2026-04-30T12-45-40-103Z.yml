@@ -1,0 +1,49 @@
+- generic [ref=e1]:
+  - main [ref=e7]:
+    - generic [ref=e8]:
+      - link "主页" [ref=e11] [cursor=pointer]:
+        - /url: /
+        - img [ref=e12]
+      - generic [ref=e15]:
+        - link "Imagine" [ref=e17] [cursor=pointer]:
+          - /url: /imagine
+          - img [ref=e20]
+          - generic [ref=e34]: Imagine
+        - generic [ref=e35]:
+          - button "设置" [ref=e36] [cursor=pointer]:
+            - img [ref=e37]
+          - link "登录" [ref=e40] [cursor=pointer]:
+            - /url: /sign-in
+          - link "注册" [ref=e41] [cursor=pointer]:
+            - /url: /sign-up
+    - generic [ref=e100]:
+      - generic [ref=e104]:
+        - paragraph [ref=e109]: 广州天气
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - generic [ref=e116]:
+              - img [ref=e117]
+              - generic [ref=e120]: 需求量高
+            - generic [ref=e121]: 请稍后重试，或免费注册以获得更高优先级使用权
+          - generic [ref=e122]:
+            - button "登录" [ref=e123] [cursor=pointer]
+            - button "注册" [ref=e124] [cursor=pointer]
+      - generic [ref=e133]:
+        - paragraph [ref=e138]: 畅所欲问
+        - generic [ref=e140]:
+          - button "附件" [ref=e142] [cursor=pointer]:
+            - img [ref=e143]
+          - generic [ref=e145]:
+            - button "模型选择" [ref=e147] [cursor=pointer]:
+              - generic [ref=e150]: Fast
+              - img [ref=e152]
+            - button "听写 (Ctrl+D)" [disabled] [ref=e156]:
+              - img [ref=e157]
+            - button "提交" [disabled] [ref=e161]:
+              - img [ref=e163]
+  - region "Notifications alt+T":
+    - list:
+      - listitem [ref=e167]:
+        - img [ref=e169]
+        - generic [ref=e175]: Fast还剩1次使用机会。使用次数每2小时重置一次。
+  - alert [ref=e94]

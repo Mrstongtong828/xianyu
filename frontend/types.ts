@@ -275,3 +275,19 @@ export interface OperationLog {
   created_at: string;
   updated_at: string;
 }
+
+export interface ActiveOutreachRecord {
+  id: number;
+  cookie_id: string;
+  item_url: string;
+  item_title: string;
+  seller_id: string;
+  seller_name: string;
+  chat_id: string;
+  message: string;
+  reply: string;
+  status: 'pending' | 'sending' | 'sent' | 'replied' | 'failed';
+  error_message: string;
+  created_at: string;
+  updated_at: string;
+}

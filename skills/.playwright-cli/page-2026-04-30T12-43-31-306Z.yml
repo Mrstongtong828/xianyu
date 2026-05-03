@@ -1,0 +1,42 @@
+- generic [ref=e1]:
+  - main [ref=e7]:
+    - generic [ref=e8]:
+      - link "主页" [ref=e11] [cursor=pointer]:
+        - /url: /
+        - img [ref=e12]
+      - generic [ref=e15]:
+        - link "Imagine" [ref=e17] [cursor=pointer]:
+          - /url: /imagine
+          - img [ref=e20]
+          - generic [ref=e34]: Imagine
+        - generic [ref=e35]:
+          - button "设置" [ref=e36] [cursor=pointer]:
+            - img [ref=e37]
+          - link "登录" [ref=e40] [cursor=pointer]:
+            - /url: /sign-in
+          - link "注册" [ref=e41] [cursor=pointer]:
+            - /url: /sign-up
+    - generic [ref=e43]:
+      - img [ref=e46]
+      - generic [ref=e59]:
+        - textbox "向 Grok 提任何问题" [active] [ref=e61]:
+          - /placeholder: 你想知道什么？
+        - generic [ref=e63]:
+          - button "附件" [ref=e65] [cursor=pointer]:
+            - img [ref=e66]
+          - generic [ref=e68]:
+            - button "模型选择" [ref=e70] [cursor=pointer]:
+              - generic [ref=e73]: Fast
+              - img [ref=e75]
+            - button "听写 (Ctrl+D)" [ref=e79] [cursor=pointer]:
+              - img [ref=e80]
+            - button "进入语音模式 (Ctrl+⇧O)" [ref=e83] [cursor=pointer]
+    - generic [ref=e91]:
+      - text: 通过给 Grok 发消息，即表示你同意
+      - link "条款" [ref=e92] [cursor=pointer]:
+        - /url: https://x.ai/legal/terms-of-service
+      - text: 和
+      - link "隐私政策" [ref=e93] [cursor=pointer]:
+        - /url: https://x.ai/legal/privacy-policy
+      - text: 。
+  - alert [ref=e94]

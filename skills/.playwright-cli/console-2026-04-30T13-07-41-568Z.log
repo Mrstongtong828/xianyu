@@ -1,0 +1,6 @@
+[     894ms] [LOG] [options] {commonOptions: Object, captchaOptions: Object, secondVerifyWebOptions: undefined} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:905
+[     899ms] [LOG] font size: 16 @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/Reader.adf96903.js:0
+[    1211ms] [LOG] %c %s color: yellow; background-color: black; [AppLog WEB SDK] [instance: muye-collector] appid: 2503, userInfo:{"user_unique_id":"7634533916884780550","user_id":"","web_id":"7634533916884780550"} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:885
+[    1211ms] [LOG] %c %s color: yellow; background-color: black; [AppLog WEB SDK] [instance: muye-collector] appid: 2503, sdk is ready, version type is full, version is 5.0.47, you can report now !!! @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:885
+[    1577ms] [LOG] 本地缓存 {info: Object, event: Object} 远程数据 {} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:851
+[    1577ms] [LOG] 最新的缓存数据 {} {} @ https://lf-fe.fqnovelstatic.com/obj/novel-fanqie-fe/toutiao/muye/js/muye_5923c0d1.js:851

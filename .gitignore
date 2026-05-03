@@ -10,5 +10,7 @@ realtime.log
 persona.txt
 static/uploads/images/
 *.pyc
+data/.sensitive_key
+data/.admin_default_password
 .env
 *.db

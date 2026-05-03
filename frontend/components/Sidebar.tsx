@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Users, ShoppingBag, CreditCard, Settings, LogOut, Box, Sparkles, Zap, MessageSquare, ShieldOff, RotateCw, MessageCircle, Clock, Menu, X, Sun, Moon, ScrollText } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, CreditCard, Settings, LogOut, Box, Sparkles, Zap, MessageSquare, ShieldOff, RotateCw, MessageCircle, Send, Clock, Menu, X, Sun, Moon, ScrollText } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 interface SidebarProps {
@@ -20,7 +20,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) 
     { id: 'items', icon: Box, label: '商品列表' },
     { id: 'item-schedule', icon: Clock, label: '上下架计划' },
     { id: 'keywords', icon: MessageSquare, label: '关键词管理' },
-    { id: 'conversations', icon: MessageCircle, label: '对话记录' },
+    { id: 'passive-reply', icon: MessageCircle, label: '被动回复记录' },
+    { id: 'active-outreach', icon: Send, label: '主动询价' },
     { id: 'logs', icon: ScrollText, label: '操作日志' },
     { id: 'blacklist', icon: ShieldOff, label: '黑名单' },
     { id: 'delivery-retry', icon: RotateCw, label: '发货重试' },
@@ -39,7 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) 
           <div className="w-10 h-10 bg-[#FFE815] rounded-xl flex items-center justify-center shadow-lg shadow-yellow-200 transform rotate-[-3deg]">
             <span className="text-black font-extrabold text-xl">闲</span>
           </div>
-          <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">闲鱼智控 <span className="text-xs bg-black text-[#FFE815] px-1.5 py-0.5 rounded ml-1">PRO</span></h1>
+          <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">广航闲鱼智控 <span className="text-xs bg-black text-[#FFE815] px-1.5 py-0.5 rounded ml-1">PRO</span></h1>
         </div>
 
         <nav className="space-y-2">

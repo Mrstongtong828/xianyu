@@ -19,15 +19,22 @@ const eventLabelMap: Record<string, string> = {};
 EVENT_TYPES.forEach(e => { eventLabelMap[e.value] = e.label; });
 
 const OperationLogs: React.FC = () => {
+  const STORAGE_KEY = 'operation_logs_form';
+  const savedForm = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
-  const [cookieIdFilter, setCookieIdFilter] = useState('');
-  const [logTypeFilter, setLogTypeFilter] = useState('');
+  const [cookieIdFilter, setCookieIdFilter] = useState(savedForm.cookieIdFilter || '');
+  const [logTypeFilter, setLogTypeFilter] = useState(savedForm.logTypeFilter || '');
   const [accounts, setAccounts] = useState<{ id: string; nickname?: string }[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(savedForm.showFilters === true);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ cookieIdFilter, logTypeFilter, showFilters }));
+  }, [cookieIdFilter, logTypeFilter, showFilters]);
 
   useEffect(() => {
     getAccountDetails().then(data => setAccounts(data)).catch(console.error);

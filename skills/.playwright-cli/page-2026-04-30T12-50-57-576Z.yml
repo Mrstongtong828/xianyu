@@ -1,0 +1,1147 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - img [ref=e7] [cursor=pointer]
+    - generic [ref=e33]:
+      - link "首页" [ref=e35] [cursor=pointer]:
+        - /url: /
+      - link "书库" [ref=e37] [cursor=pointer]:
+        - /url: /library
+      - link "书架" [ref=e39] [cursor=pointer]:
+        - /url: /bookshelf
+      - link "原创榜" [ref=e41] [cursor=pointer]:
+        - /url: /rank
+      - link "作家专区" [ref=e43] [cursor=pointer]:
+        - /url: /writer/zone/
+      - link "版权专区" [ref=e45] [cursor=pointer]:
+        - /url: /writer/zone/copyright
+      - generic [ref=e46]:
+        - textbox "请输入书名或作者名" [ref=e47]
+        - generic [ref=e48] [cursor=pointer]: 
+      - generic [ref=e52]:
+        - generic [ref=e53] [cursor=pointer]: 登录
+        - generic [ref=e54] [cursor=pointer]: 注册
+  - generic [ref=e56]:
+    - generic [ref=e58]:
+      - generic [ref=e59]: 首页/恶毒女配守活寡？夫兄，人家好怕
+      - generic [ref=e60]:
+        - img "恶毒女配守活寡？夫兄，人家好怕" [ref=e63]
+        - generic [ref=e65]:
+          - heading "恶毒女配守活寡？夫兄，人家好怕" [level=1] [ref=e67]
+          - generic [ref=e68]: 已完结宫斗宅斗古代言情重生前世今生古色古香
+          - generic [ref=e70]:
+            - generic [ref=e71]: "55.8"
+            - generic [ref=e72]: 万字
+          - generic [ref=e73]:
+            - link "最近更新：番外 容谏雪：落雪有声" [ref=e74] [cursor=pointer]:
+              - /url: /reader/7570630245250777625
+              - generic [ref=e75]: 最近更新：番外 容谏雪：落雪有声
+            - generic [ref=e76]: 2025-11-09 15:57
+          - button "开始阅读" [ref=e77] [cursor=pointer]:
+            - link "开始阅读" [ref=e78]:
+              - /url: /reader/7494644282981106238
+          - link:
+            - /url: https://www.changdunovel.com/
+            - button [ref=e79] [cursor=pointer]
+          - generic [ref=e80]: 
+        - generic [ref=e83] [cursor=pointer]:
+          - img "恶毒女配守活寡？夫兄，人家好怕作者叶不鸿" [ref=e84]
+          - generic [ref=e86]: 叶不鸿
+          - generic [ref=e88]: 你说就山居于此吧，等胭脂用尽，桃花便开了。vb：叶不鸿
+    - generic [ref=e90]:
+      - heading "作品简介" [level=2] [ref=e92]
+      - paragraph [ref=e94]: 【兄夺弟妻+蓄意撩拨】 （黑切黑恶女✖️禁欲冷情少傅） 前世，裴惊絮为战死的夫君容玄舟守寡三年，却等来他携战友遗孀白疏桐与一双儿女回京。 容家父母缄默，只劝她贤惠大度。 那遗孀姿容绝世，入京不久便引得京城权贵争风吃醋，就连容玄舟也被她吸引，对其温柔呵护。 最终，裴惊絮被白疏桐的追求者当做投名状，溺毙荷花池。 濒死方悟，自己原来活在万人迷话本里，是女主白疏桐宠冠京城路上的绊脚石。 重活一世，身为恶毒女配的裴惊絮意识到，要在女主回京之前，给自己找个靠山。 于是，裴惊絮的心思打到了那位清绝无双，鹤骨松姿的容家大郎，当朝少傅——容谏雪身上。 是夜，裴惊絮眼尾猩红，薄裳透骨，哭得梨花带雨，叩开他房门：“夫兄，二郎不在，阿絮真的好怕……” 容谏雪眸光冷沉，袖间的佛珠颗颗收紧。 -- 容玄舟回京之后，发现他那糟糠之妻竟不缠着他，反倒频频出入兄长宅院。 素来知晓兄长严苛，容玄舟冷声对她道：“你若是服个软，我便让大哥不罚你了。” 屏风后，容谏雪将她半截玉臂抓回。 男人目光晦暗，哑声替她答：“她该罚。” -- 后来裴惊絮跑了。 城外，私兵列队，男人步步逼近，眼中是滔天妄念：“阿絮说得对，我们是该有个孩子了。” 后排提醒：男主与男配非亲兄弟~
+      - heading "目录 263章" [level=3] [ref=e96]:
+        - text: 目录
+        - text: 263章
+      - generic [ref=e99]:
+        - generic [ref=e100]:
+          - text: 第一卷
+          - text: 共263章
+        - generic [ref=e102]:
+          - link "第1章 她是恶毒女配！" [ref=e104] [cursor=pointer]:
+            - /url: /reader/7494644282981106238
+          - link "第2章 诱他失控" [ref=e106] [cursor=pointer]:
+            - /url: /reader/7512196204524995096
+          - link "第3章 刺杀！" [ref=e108] [cursor=pointer]:
+            - /url: /reader/7512200031944835609
+          - link "第4章 苦肉计" [ref=e110] [cursor=pointer]:
+            - /url: /reader/7514417742309491224
+          - link "第5章 她不甘心！" [ref=e112] [cursor=pointer]:
+            - /url: /reader/7514767732856865342
+          - link "第6章 他的慈悲" [ref=e114] [cursor=pointer]:
+            - /url: /reader/7515147056944513598
+          - link "第7章 少傅大人可有婚配？" [ref=e116] [cursor=pointer]:
+            - /url: /reader/7515512093815079486
+          - link "第8章 开演！" [ref=e118] [cursor=pointer]:
+            - /url: /reader/7515883626119037464
+          - link "第9章 江晦：我真该死啊！" [ref=e120] [cursor=pointer]:
+            - /url: /reader/7516219997585162776
+          - link "第10章 想成为一家人~" [ref=e122] [cursor=pointer]:
+            - /url: /reader/7516461436432810520
+          - generic [ref=e123]:
+            - link "第11章 她要演一出大戏" [ref=e124] [cursor=pointer]:
+              - /url: /reader/7516901421699039769
+            - generic [ref=e125]: 
+          - generic [ref=e126]:
+            - link "第12章 生辰宴" [ref=e127] [cursor=pointer]:
+              - /url: /reader/7516937699580707353
+            - generic [ref=e128]: 
+          - generic [ref=e129]:
+            - link "第13章 夫兄生气了~" [ref=e130] [cursor=pointer]:
+              - /url: /reader/7516976425715384894
+            - generic [ref=e131]: 
+          - generic [ref=e132]:
+            - link "第14章 求您……" [ref=e133] [cursor=pointer]:
+              - /url: /reader/7517280440558813720
+            - generic [ref=e134]: 
+          - generic [ref=e135]:
+            - link "第15章 她不止要活命！" [ref=e136] [cursor=pointer]:
+              - /url: /reader/7517311118834942488
+            - generic [ref=e137]: 
+          - generic [ref=e138]:
+            - link "第16章 你不爱阿絮了吗？" [ref=e139] [cursor=pointer]:
+              - /url: /reader/7517358301001040408
+            - generic [ref=e140]: 
+          - generic [ref=e141]:
+            - link "第17章 跟我走还是留在这儿？" [ref=e142] [cursor=pointer]:
+              - /url: /reader/7517650020733043262
+            - generic [ref=e143]: 
+          - generic [ref=e144]:
+            - link "第18章 裴惊絮，说话。" [ref=e145] [cursor=pointer]:
+              - /url: /reader/7517680222712382014
+            - generic [ref=e146]: 
+          - generic [ref=e147]:
+            - link "第19章 放过我吧" [ref=e148] [cursor=pointer]:
+              - /url: /reader/7517731055445475902
+            - generic [ref=e149]: 
+          - generic [ref=e150]:
+            - link "第20章 母亲需向裴氏致歉。" [ref=e151] [cursor=pointer]:
+              - /url: /reader/7518031427452011032
+            - generic [ref=e152]: 
+          - generic [ref=e153]:
+            - link "第21章 是他错了" [ref=e154] [cursor=pointer]:
+              - /url: /reader/7518059870671618584
+            - generic [ref=e155]: 
+          - generic [ref=e156]:
+            - link "第22章 风寒好些了吗？" [ref=e157] [cursor=pointer]:
+              - /url: /reader/7518122813455090238
+            - generic [ref=e158]: 
+          - generic [ref=e159]:
+            - link "第23章 不会再给您添麻烦了" [ref=e160] [cursor=pointer]:
+              - /url: /reader/7518405959375389246
+            - generic [ref=e161]: 
+          - generic [ref=e162]:
+            - link "第24章 “鱼儿”上钩了" [ref=e163] [cursor=pointer]:
+              - /url: /reader/7518429545125397054
+            - generic [ref=e164]: 
+          - generic [ref=e165]:
+            - link "第25章 “进来。”" [ref=e166] [cursor=pointer]:
+              - /url: /reader/7518477356734890520
+            - generic [ref=e167]: 
+          - generic [ref=e168]:
+            - link "第26章 帮帮阿絮……" [ref=e169] [cursor=pointer]:
+              - /url: /reader/7518779897704104472
+            - generic [ref=e170]: 
+          - generic [ref=e171]:
+            - link "第27章 阿絮好高兴~" [ref=e172] [cursor=pointer]:
+              - /url: /reader/7518797140617855512
+            - generic [ref=e173]: 
+          - generic [ref=e174]:
+            - link "第28章 想要……与他们不同的。" [ref=e175] [cursor=pointer]:
+              - /url: /reader/7518842518574727704
+            - generic [ref=e176]: 
+          - generic [ref=e177]:
+            - link "第29章 先生，明日见~" [ref=e178] [cursor=pointer]:
+              - /url: /reader/7519147720632713790
+            - generic [ref=e179]: 
+          - generic [ref=e180]:
+            - link "第30章 我与他是一家人~" [ref=e181] [cursor=pointer]:
+              - /url: /reader/7519168549793841726
+            - generic [ref=e182]: 
+          - generic [ref=e183]:
+            - link "第31章 可爱吗？" [ref=e184] [cursor=pointer]:
+              - /url: /reader/7519237653758231064
+            - generic [ref=e185]: 
+          - generic [ref=e186]:
+            - link "第32章 比赛！" [ref=e187] [cursor=pointer]:
+              - /url: /reader/7519516152339366424
+            - generic [ref=e188]: 
+          - generic [ref=e189]:
+            - link "第33章 献舞" [ref=e190] [cursor=pointer]:
+              - /url: /reader/7519545476270539288
+            - generic [ref=e191]: 
+          - generic [ref=e192]:
+            - link "第34章 他接住了她" [ref=e193] [cursor=pointer]:
+              - /url: /reader/7519582965546893848
+            - generic [ref=e194]: 
+          - generic [ref=e195]:
+            - link "第35章 您要定我的罪吗？" [ref=e196] [cursor=pointer]:
+              - /url: /reader/7519895641980420670
+            - generic [ref=e197]: 
+          - generic [ref=e198]:
+            - link "第36章 可是，你在生气。" [ref=e199] [cursor=pointer]:
+              - /url: /reader/7519953876678607422
+            - generic [ref=e200]: 
+          - generic [ref=e201]:
+            - link "第37章 沈从月登门致歉？" [ref=e202] [cursor=pointer]:
+              - /url: /reader/7520254342528500286
+            - generic [ref=e203]: 
+          - generic [ref=e204]:
+            - link "第38章 沈小姐，向裴惊絮致歉。" [ref=e205] [cursor=pointer]:
+              - /url: /reader/7520281964146852414
+            - generic [ref=e206]: 
+          - generic [ref=e207]:
+            - link "第39章 “裴惊絮。”" [ref=e208] [cursor=pointer]:
+              - /url: /reader/7520328852824932926
+            - generic [ref=e209]: 
+          - generic [ref=e210]:
+            - link "第40章 还生我的气吗？" [ref=e211] [cursor=pointer]:
+              - /url: /reader/7520645019208778264
+            - generic [ref=e212]: 
+          - generic [ref=e213]:
+            - link "第41章 坏脾气" [ref=e214] [cursor=pointer]:
+              - /url: /reader/7520683609770951192
+            - generic [ref=e215]: 
+          - generic [ref=e216]:
+            - link "第42章 冷泉泡澡" [ref=e217] [cursor=pointer]:
+              - /url: /reader/7521004572949627416
+            - generic [ref=e218]: 
+          - generic [ref=e219]:
+            - link "第43章 阿絮好怕……" [ref=e220] [cursor=pointer]:
+              - /url: /reader/7521024575442797080
+            - generic [ref=e221]: 
+          - generic [ref=e222]:
+            - link "第44章 “牵着。”" [ref=e223] [cursor=pointer]:
+              - /url: /reader/7521376820168507929
+            - generic [ref=e224]: 
+          - generic [ref=e225]:
+            - link "第45章 冷水澡" [ref=e226] [cursor=pointer]:
+              - /url: /reader/7521396755166937625
+            - generic [ref=e227]: 
+          - generic [ref=e228]:
+            - link "第46章 剧情改变了！？" [ref=e229] [cursor=pointer]:
+              - /url: /reader/7521740763785347608
+            - generic [ref=e230]: 
+          - generic [ref=e231]:
+            - link "第47章 毁她清白！" [ref=e232] [cursor=pointer]:
+              - /url: /reader/7521764206937391640
+            - generic [ref=e233]: 
+          - generic [ref=e234]:
+            - link "第48章 送去青楼！" [ref=e235] [cursor=pointer]:
+              - /url: /reader/7522123347111461401
+            - generic [ref=e236]: 
+          - generic [ref=e237]:
+            - link "第49章 裴惊絮在哪儿？" [ref=e238] [cursor=pointer]:
+              - /url: /reader/7522135492343644697
+            - generic [ref=e239]: 
+          - generic [ref=e240]:
+            - link "第50章 他动了杀心。" [ref=e241] [cursor=pointer]:
+              - /url: /reader/7522480268884574782
+            - generic [ref=e242]: 
+          - generic [ref=e243]:
+            - link "第51章 你怎么才来救我……" [ref=e244] [cursor=pointer]:
+              - /url: /reader/7522502260924891710
+            - generic [ref=e245]: 
+          - generic [ref=e246]:
+            - link "第52章 夫君……" [ref=e247] [cursor=pointer]:
+              - /url: /reader/7522794730338402841
+            - generic [ref=e248]: 
+          - generic [ref=e249]:
+            - link "第53章 他在躲她。" [ref=e250] [cursor=pointer]:
+              - /url: /reader/7522865449600565785
+            - generic [ref=e251]: 
+          - generic [ref=e252]:
+            - link "第54章 裴惊絮，你还敢出现在我面前？" [ref=e253] [cursor=pointer]:
+              - /url: /reader/7523222992755622424
+            - generic [ref=e254]: 
+          - generic [ref=e255]:
+            - link "第55章 我与大人清清白白~" [ref=e256] [cursor=pointer]:
+              - /url: /reader/7523247161295782424
+            - generic [ref=e257]: 
+          - generic [ref=e258]:
+            - link "第56章 用完就扔？" [ref=e259] [cursor=pointer]:
+              - /url: /reader/7523598076091580953
+            - generic [ref=e260]: 
+          - generic [ref=e261]:
+            - link "第57章 以后都不会来书房了。" [ref=e262] [cursor=pointer]:
+              - /url: /reader/7523618007717773849
+            - generic [ref=e263]: 
+          - generic [ref=e264]:
+            - link "第58章 二娘子是想要爬床吗" [ref=e265] [cursor=pointer]:
+              - /url: /reader/7523970282017522200
+            - generic [ref=e266]: 
+          - generic [ref=e267]:
+            - link "第59章 求和" [ref=e268] [cursor=pointer]:
+              - /url: /reader/7523993566377427480
+            - generic [ref=e269]: 
+          - generic [ref=e270]:
+            - link "第60章 容谏雪怎么来了？" [ref=e271] [cursor=pointer]:
+              - /url: /reader/7524329873435804222
+            - generic [ref=e272]: 
+          - generic [ref=e273]:
+            - link "第61章 他的愤怒与无措" [ref=e274] [cursor=pointer]:
+              - /url: /reader/7524352382617010750
+            - generic [ref=e275]: 
+          - generic [ref=e276]:
+            - link "第62章 裴惊絮，向我道歉。" [ref=e277] [cursor=pointer]:
+              - /url: /reader/7524715053593936408
+            - generic [ref=e278]: 
+          - generic [ref=e279]:
+            - link "第63章 这么快就要回京了？" [ref=e280] [cursor=pointer]:
+              - /url: /reader/7524734109835330072
+            - generic [ref=e281]: 
+          - generic [ref=e282]:
+            - link "第64章 “容家的。”" [ref=e283] [cursor=pointer]:
+              - /url: /reader/7525083784555790910
+            - generic [ref=e284]: 
+          - generic [ref=e285]:
+            - link "第65章 替她撑腰。" [ref=e286] [cursor=pointer]:
+              - /url: /reader/7525104775596081726
+            - generic [ref=e287]: 
+          - generic [ref=e288]:
+            - link "第66章 大人最好了……" [ref=e289] [cursor=pointer]:
+              - /url: /reader/7525454012594799128
+            - generic [ref=e290]: 
+          - generic [ref=e291]:
+            - link "第67章 无声的撩拨" [ref=e292] [cursor=pointer]:
+              - /url: /reader/7525474291677151768
+            - generic [ref=e293]: 
+          - generic [ref=e294]:
+            - link "第68章 要牵手吗？" [ref=e295] [cursor=pointer]:
+              - /url: /reader/7525830266166723096
+            - generic [ref=e296]: 
+          - generic [ref=e297]:
+            - link "第69章 二郎不在，阿絮真的好怕……" [ref=e298] [cursor=pointer]:
+              - /url: /reader/7525849868410028568
+            - generic [ref=e299]: 
+          - generic [ref=e300]:
+            - link "第70章 “撒谎。”" [ref=e301] [cursor=pointer]:
+              - /url: /reader/7526196276187120153
+            - generic [ref=e302]: 
+          - generic [ref=e303]:
+            - link "第71章 现在满意了吗？" [ref=e304] [cursor=pointer]:
+              - /url: /reader/7526216767367021081
+            - generic [ref=e305]: 
+          - generic [ref=e306]:
+            - link "第72章 我讨厌你。" [ref=e307] [cursor=pointer]:
+              - /url: /reader/7526558769560420926
+            - generic [ref=e308]: 
+          - generic [ref=e309]:
+            - link "第73章 你们是不是闹别扭了？" [ref=e310] [cursor=pointer]:
+              - /url: /reader/7526582516493337150
+            - generic [ref=e311]: 
+          - generic [ref=e312]:
+            - link "第74章 殿下，过了。" [ref=e313] [cursor=pointer]:
+              - /url: /reader/7526933370819838526
+            - generic [ref=e314]: 
+          - generic [ref=e315]:
+            - link "第75章 酸话。" [ref=e316] [cursor=pointer]:
+              - /url: /reader/7526957595634975294
+            - generic [ref=e317]: 
+          - generic [ref=e318]:
+            - link "第76章 还请您忘了吧……" [ref=e319] [cursor=pointer]:
+              - /url: /reader/7527311027348701720
+            - generic [ref=e320]: 
+          - generic [ref=e321]:
+            - link "第77章 赐婚？" [ref=e322] [cursor=pointer]:
+              - /url: /reader/7527330509978878488
+            - generic [ref=e323]: 
+          - generic [ref=e324]:
+            - link "第78章 公子说，二娘子爱哭。" [ref=e325] [cursor=pointer]:
+              - /url: /reader/7527678766592557593
+            - generic [ref=e326]: 
+          - generic [ref=e327]:
+            - link "第79章 “这也是真话吗？”" [ref=e328] [cursor=pointer]:
+              - /url: /reader/7527700256708887065
+            - generic [ref=e329]: 
+          - generic [ref=e330]:
+            - link "第80章 臣并无成婚打算" [ref=e331] [cursor=pointer]:
+              - /url: /reader/7528054291966214680
+            - generic [ref=e332]: 
+          - generic [ref=e333]:
+            - link "第81章 他生气了" [ref=e334] [cursor=pointer]:
+              - /url: /reader/7528071582221074968
+            - generic [ref=e335]: 
+          - generic [ref=e336]:
+            - link "第82章 私心" [ref=e337] [cursor=pointer]:
+              - /url: /reader/7528429694748721689
+            - generic [ref=e338]: 
+          - generic [ref=e339]:
+            - link "第83章 赔你新的好不好？" [ref=e340] [cursor=pointer]:
+              - /url: /reader/7528441059202843161
+            - generic [ref=e341]: 
+          - generic [ref=e342]:
+            - link "第84章 他发现了！" [ref=e343] [cursor=pointer]:
+              - /url: /reader/7528799450253230616
+            - generic [ref=e344]: 
+          - generic [ref=e345]:
+            - link "第85章 “张嘴。”" [ref=e346] [cursor=pointer]:
+              - /url: /reader/7528815583790383640
+            - generic [ref=e347]: 
+          - generic [ref=e348]:
+            - link "第86章 赌气。" [ref=e349] [cursor=pointer]:
+              - /url: /reader/7529162911118279230
+            - generic [ref=e350]: 
+          - generic [ref=e351]:
+            - link "第87章 “怎么求？”" [ref=e352] [cursor=pointer]:
+              - /url: /reader/7529182262403793470
+            - generic [ref=e353]: 
+          - generic [ref=e354]:
+            - link "第88章 “裴惊絮，说不讨厌我。”" [ref=e355] [cursor=pointer]:
+              - /url: /reader/7529542734789493272
+            - generic [ref=e356]: 
+          - generic [ref=e357]:
+            - link "第89章 他到底在干什么……" [ref=e358] [cursor=pointer]:
+              - /url: /reader/7529557268983988760
+            - generic [ref=e359]: 
+          - generic [ref=e360]:
+            - link "第90章 “禽兽。”" [ref=e361] [cursor=pointer]:
+              - /url: /reader/7529908288335397400
+            - generic [ref=e362]: 
+          - generic [ref=e363]:
+            - link "第91章 你不该利用她。" [ref=e364] [cursor=pointer]:
+              - /url: /reader/7529925823575376408
+            - generic [ref=e365]: 
+          - generic [ref=e366]:
+            - link "第92章 只要是他，你什么都肯做？" [ref=e367] [cursor=pointer]:
+              - /url: /reader/7530274606540653118
+            - generic [ref=e368]: 
+          - generic [ref=e369]:
+            - link "第93章 雨夜" [ref=e370] [cursor=pointer]:
+              - /url: /reader/7530298036237386302
+            - generic [ref=e371]: 
+          - generic [ref=e372]:
+            - link "第94章 想牵手……" [ref=e373] [cursor=pointer]:
+              - /url: /reader/7530648228287496728
+            - generic [ref=e374]: 
+          - generic [ref=e375]:
+            - link "第95章 她的歪理" [ref=e376] [cursor=pointer]:
+              - /url: /reader/7530668907409981976
+            - generic [ref=e377]: 
+          - generic [ref=e378]:
+            - link "第96章 妄想" [ref=e379] [cursor=pointer]:
+              - /url: /reader/7531016854010069528
+            - generic [ref=e380]: 
+          - generic [ref=e381]:
+            - link "第97章 比玄舟还要好用吗？" [ref=e382] [cursor=pointer]:
+              - /url: /reader/7531040342485762584
+            - generic [ref=e383]: 
+          - generic [ref=e384]:
+            - link "第98章 好自私的少傅大人！" [ref=e385] [cursor=pointer]:
+              - /url: /reader/7531390948681450008
+            - generic [ref=e386]: 
+          - generic [ref=e387]:
+            - link "第99章 烫到舌头了" [ref=e388] [cursor=pointer]:
+              - /url: /reader/7531415747319300632
+            - generic [ref=e389]: 
+          - generic [ref=e390]:
+            - link "第100章 要她跳舞！" [ref=e391] [cursor=pointer]:
+              - /url: /reader/7531766377133113918
+            - generic [ref=e392]: 
+          - generic [ref=e393]:
+            - link "第101章 大人是坏人~" [ref=e394] [cursor=pointer]:
+              - /url: /reader/7531785396527579710
+            - generic [ref=e395]: 
+          - generic [ref=e396]:
+            - link "第102章 不该有的心思" [ref=e397] [cursor=pointer]:
+              - /url: /reader/7532140112939860504
+            - generic [ref=e398]: 
+          - generic [ref=e399]:
+            - link "第103章 帮阿絮绞干头发" [ref=e400] [cursor=pointer]:
+              - /url: /reader/7532155970680537624
+            - generic [ref=e401]: 
+          - generic [ref=e402]:
+            - link "第104章 容玄舟回来了！！" [ref=e403] [cursor=pointer]:
+              - /url: /reader/7532508585721348633
+            - generic [ref=e404]: 
+          - generic [ref=e405]:
+            - link "第105章 二郎，你回来了……" [ref=e406] [cursor=pointer]:
+              - /url: /reader/7532526150669582873
+            - generic [ref=e407]: 
+          - generic [ref=e408]:
+            - link "第106章 夫君，妾真的好想你……" [ref=e409] [cursor=pointer]:
+              - /url: /reader/7532528178976260633
+            - generic [ref=e410]: 
+          - generic [ref=e411]:
+            - link "第107章 替她撑腰！" [ref=e412] [cursor=pointer]:
+              - /url: /reader/7532896745110389272
+            - generic [ref=e413]: 
+          - generic [ref=e414]:
+            - link "第108章 与我无关。" [ref=e415] [cursor=pointer]:
+              - /url: /reader/7533244992345621016
+            - generic [ref=e416]: 
+          - generic [ref=e417]:
+            - link "第109章 你怎么不帮阿絮剥虾呀？" [ref=e418] [cursor=pointer]:
+              - /url: /reader/7533265587024167448
+            - generic [ref=e419]: 
+          - generic [ref=e420]:
+            - link "第110章 养不熟的野猫" [ref=e421] [cursor=pointer]:
+              - /url: /reader/7533616210928206360
+            - generic [ref=e422]: 
+          - generic [ref=e423]:
+            - link "第111章 别净想着那档子事！" [ref=e424] [cursor=pointer]:
+              - /url: /reader/7533637177222119960
+            - generic [ref=e425]: 
+          - generic [ref=e426]:
+            - link "第112章 神佛救不了他" [ref=e427] [cursor=pointer]:
+              - /url: /reader/7533991101003219480
+            - generic [ref=e428]: 
+          - generic [ref=e429]:
+            - link "第113章 她发现了他的“秘密”" [ref=e430] [cursor=pointer]:
+              - /url: /reader/7534010124382241304
+            - generic [ref=e431]: 
+          - generic [ref=e432]:
+            - link "第114章 你猜他会帮谁？" [ref=e433] [cursor=pointer]:
+              - /url: /reader/7534365015285957144
+            - generic [ref=e434]: 
+          - generic [ref=e435]:
+            - link "第115章 “消气了？”" [ref=e436] [cursor=pointer]:
+              - /url: /reader/7534383899971944984
+            - generic [ref=e437]: 
+          - generic [ref=e438]:
+            - link "第116章 心疼了？" [ref=e439] [cursor=pointer]:
+              - /url: /reader/7534730580399751705
+            - generic [ref=e440]: 
+          - generic [ref=e441]:
+            - link "第117章 她叫他“夫君”" [ref=e442] [cursor=pointer]:
+              - /url: /reader/7534753655329669657
+            - generic [ref=e443]: 
+          - generic [ref=e444]:
+            - link "第118章 大人对阿絮而言很重要……" [ref=e445] [cursor=pointer]:
+              - /url: /reader/7535105353080390169
+            - generic [ref=e446]: 
+          - generic [ref=e447]:
+            - link "第119章 我来癸水了……" [ref=e448] [cursor=pointer]:
+              - /url: /reader/7535124858884063769
+            - generic [ref=e449]: 
+          - generic [ref=e450]:
+            - link "第120章 穿他的衣服" [ref=e451] [cursor=pointer]:
+              - /url: /reader/7535480578087338558
+            - generic [ref=e452]: 
+          - generic [ref=e453]:
+            - link "第121章 他心中，压着一头兽" [ref=e454] [cursor=pointer]:
+              - /url: /reader/7535496654279934526
+            - generic [ref=e455]: 
+          - generic [ref=e456]:
+            - link "第122章 裴惊絮，念给我听。" [ref=e457] [cursor=pointer]:
+              - /url: /reader/7535846445715309080
+            - generic [ref=e458]: 
+          - generic [ref=e459]:
+            - link "第123章 阿絮知错了……" [ref=e460] [cursor=pointer]:
+              - /url: /reader/7535866188488770072
+            - generic [ref=e461]: 
+          - generic [ref=e462]:
+            - link "第124章 裴惊絮，过来。" [ref=e463] [cursor=pointer]:
+              - /url: /reader/7536216514421080638
+            - generic [ref=e464]: 
+          - generic [ref=e465]:
+            - link "第125章 他的嫉妒" [ref=e466] [cursor=pointer]:
+              - /url: /reader/7536239516718219838
+            - generic [ref=e467]: 
+          - generic [ref=e468]:
+            - link "第126章 二公子与二娘子住一间房" [ref=e469] [cursor=pointer]:
+              - /url: /reader/7536590277746639385
+            - generic [ref=e470]: 
+          - generic [ref=e471]:
+            - link "第127章 侍奉他宽衣" [ref=e472] [cursor=pointer]:
+              - /url: /reader/7536609283534750233
+            - generic [ref=e473]: 
+          - generic [ref=e474]:
+            - link "第128章 “现在，帮我宽衣。”" [ref=e475] [cursor=pointer]:
+              - /url: /reader/7536958778709639705
+            - generic [ref=e476]: 
+          - generic [ref=e477]:
+            - link "第129章 她需要一个孩子。" [ref=e478] [cursor=pointer]:
+              - /url: /reader/7536984076306104857
+            - generic [ref=e479]: 
+          - generic [ref=e480]:
+            - link "第130章 平安符是给大人求的……" [ref=e481] [cursor=pointer]:
+              - /url: /reader/7537332038022464062
+            - generic [ref=e482]: 
+          - generic [ref=e483]:
+            - link "第131章 要打雷了" [ref=e484] [cursor=pointer]:
+              - /url: /reader/7537350972775858750
+            - generic [ref=e485]: 
+          - generic [ref=e486]:
+            - link "第132章 少傅大人还会保你吗？" [ref=e487] [cursor=pointer]:
+              - /url: /reader/7537701185369686590
+            - generic [ref=e488]: 
+          - generic [ref=e489]:
+            - link "第133章 哟呵，针对她？" [ref=e490] [cursor=pointer]:
+              - /url: /reader/7537723924688159294
+            - generic [ref=e491]: 
+          - generic [ref=e492]:
+            - link "第134章 “你敢。”" [ref=e493] [cursor=pointer]:
+              - /url: /reader/7538071727385870872
+            - generic [ref=e494]: 
+          - generic [ref=e495]:
+            - link "第135章 打雷了！" [ref=e496] [cursor=pointer]:
+              - /url: /reader/7538091165778706968
+            - generic [ref=e497]: 
+          - generic [ref=e498]:
+            - link "第136章 她在抗拒他" [ref=e499] [cursor=pointer]:
+              - /url: /reader/7538445846593929753
+            - generic [ref=e500]: 
+          - generic [ref=e501]:
+            - link "第137章 “白氏不配。”" [ref=e502] [cursor=pointer]:
+              - /url: /reader/7538459053878428185
+            - generic [ref=e503]: 
+          - generic [ref=e504]:
+            - link "第138章 “裴惊絮，求我。”" [ref=e505] [cursor=pointer]:
+              - /url: /reader/7538807739175141912
+            - generic [ref=e506]: 
+          - generic [ref=e507]:
+            - link "第139章 她发现了！" [ref=e508] [cursor=pointer]:
+              - /url: /reader/7538834506581557784
+            - generic [ref=e509]: 
+          - generic [ref=e510]:
+            - link "第140章 “我来教。”" [ref=e511] [cursor=pointer]:
+              - /url: /reader/7539188887063626265
+            - generic [ref=e512]: 
+          - generic [ref=e513]:
+            - link "第141章 “说，谢先生教诲。”" [ref=e514] [cursor=pointer]:
+              - /url: /reader/7539207448498799129
+            - generic [ref=e515]: 
+          - generic [ref=e516]:
+            - link "第142章 “裴惊絮，利用我。”" [ref=e517] [cursor=pointer]:
+              - /url: /reader/7539559632491004440
+            - generic [ref=e518]: 
+          - generic [ref=e519]:
+            - link "第143章 容玄舟，我们和离。" [ref=e520] [cursor=pointer]:
+              - /url: /reader/7539573754892927512
+            - generic [ref=e521]: 
+          - generic [ref=e522]:
+            - link "第144章 服软" [ref=e523] [cursor=pointer]:
+              - /url: /reader/7539924369011655230
+            - generic [ref=e524]: 
+          - generic [ref=e525]:
+            - link "第145章 反击！" [ref=e526] [cursor=pointer]:
+              - /url: /reader/7539940628684079678
+            - generic [ref=e527]: 
+          - generic [ref=e528]:
+            - link "第146章 她的倚仗！" [ref=e529] [cursor=pointer]:
+              - /url: /reader/7540303130471186968
+            - generic [ref=e530]: 
+          - generic [ref=e531]:
+            - link "第147章 我的神佛，不在寺庙。" [ref=e532] [cursor=pointer]:
+              - /url: /reader/7540321307427095065
+            - generic [ref=e533]: 
+          - generic [ref=e534]:
+            - link "第148章 你不敢。" [ref=e535] [cursor=pointer]:
+              - /url: /reader/7540668174467875353
+            - generic [ref=e536]: 
+          - generic [ref=e537]:
+            - link "第149章 跪下。" [ref=e538] [cursor=pointer]:
+              - /url: /reader/7540669111873847833
+            - generic [ref=e539]: 
+          - generic [ref=e540]:
+            - link "第150章 人心本就是偏的。" [ref=e541] [cursor=pointer]:
+              - /url: /reader/7541045833941451326
+            - generic [ref=e542]: 
+          - generic [ref=e543]:
+            - link "第151章 “我家的。”" [ref=e544] [cursor=pointer]:
+              - /url: /reader/7541063846056706622
+            - generic [ref=e545]: 
+          - generic [ref=e546]:
+            - link "第152章 少傅大人心仪的女子~" [ref=e547] [cursor=pointer]:
+              - /url: /reader/7541418763179016728
+            - generic [ref=e548]: 
+          - generic [ref=e549]:
+            - link "第153章 当恶女真爽！" [ref=e550] [cursor=pointer]:
+              - /url: /reader/7541436231733740056
+            - generic [ref=e551]: 
+          - generic [ref=e552]:
+            - link "第154章 夫君你怎么了！？" [ref=e553] [cursor=pointer]:
+              - /url: /reader/7541790131728941630
+            - generic [ref=e554]: 
+          - generic [ref=e555]:
+            - link "第155章 真是一对般配的夫妻~" [ref=e556] [cursor=pointer]:
+              - /url: /reader/7541806410661642814
+            - generic [ref=e557]: 
+          - generic [ref=e558]:
+            - link "第156章 容谏雪的惩罚" [ref=e559] [cursor=pointer]:
+              - /url: /reader/7542145625228313113
+            - generic [ref=e560]: 
+          - generic [ref=e561]:
+            - link "第157章 先生……" [ref=e562] [cursor=pointer]:
+              - /url: /reader/7542171569884234265
+            - generic [ref=e563]: 
+          - generic [ref=e564]:
+            - link "第158章 她非虚妄" [ref=e565] [cursor=pointer]:
+              - /url: /reader/7542533747640386110
+            - generic [ref=e566]: 
+          - generic [ref=e567]:
+            - link "第159章 共度春宵之人~" [ref=e568] [cursor=pointer]:
+              - /url: /reader/7542549843328107070
+            - generic [ref=e569]: 
+          - generic [ref=e570]:
+            - link "第160章 隐秘的撩拨" [ref=e571] [cursor=pointer]:
+              - /url: /reader/7542902538626925081
+            - generic [ref=e572]: 
+          - generic [ref=e573]:
+            - link "第161章 阿絮，我们今晚同房吧……" [ref=e574] [cursor=pointer]:
+              - /url: /reader/7542917828572103193
+            - generic [ref=e575]: 
+          - generic [ref=e576]:
+            - link "第162章 今晚来我房中。" [ref=e577] [cursor=pointer]:
+              - /url: /reader/7543271536539468350
+            - generic [ref=e578]: 
+          - generic [ref=e579]:
+            - link "第163章 有多喜欢他？" [ref=e580] [cursor=pointer]:
+              - /url: /reader/7543292605929357886
+            - generic [ref=e581]: 
+          - generic [ref=e582]:
+            - link "第164章 陪我睡觉" [ref=e583] [cursor=pointer]:
+              - /url: /reader/7543649476469080638
+            - generic [ref=e584]: 
+          - generic [ref=e585]:
+            - link "第165章 好难选啊~~" [ref=e586] [cursor=pointer]:
+              - /url: /reader/7543663905499791934
+            - generic [ref=e587]: 
+          - generic [ref=e588]:
+            - link "第166章 “阿絮，他们都没我好。”" [ref=e589] [cursor=pointer]:
+              - /url: /reader/7544015551673139737
+            - generic [ref=e590]: 
+          - generic [ref=e591]:
+            - link "第167章 恳请先生教诲……" [ref=e592] [cursor=pointer]:
+              - /url: /reader/7544033915401404953
+            - generic [ref=e593]: 
+          - generic [ref=e594]:
+            - link "第168章 阿絮，你来接我啦？" [ref=e595] [cursor=pointer]:
+              - /url: /reader/7544379673891848729
+            - generic [ref=e596]: 
+          - generic [ref=e597]:
+            - link "第169章 这里……人太多了……" [ref=e598] [cursor=pointer]:
+              - /url: /reader/7544400976917070361
+            - generic [ref=e599]: 
+          - generic [ref=e600]:
+            - link "第170章 给你个诰命好不好？" [ref=e601] [cursor=pointer]:
+              - /url: /reader/7544575274969481753
+            - generic [ref=e602]: 
+          - generic [ref=e603]:
+            - link "第171章 阿絮，你来帮我上药好不好？" [ref=e604] [cursor=pointer]:
+              - /url: /reader/7544772610916090430
+            - generic [ref=e605]: 
+          - generic [ref=e606]:
+            - link "第172章 “倒是好心得很。”" [ref=e607] [cursor=pointer]:
+              - /url: /reader/7545125114782695998
+            - generic [ref=e608]: 
+          - generic [ref=e609]:
+            - link "第173章 “裴惊絮，撒娇没用。”" [ref=e610] [cursor=pointer]:
+              - /url: /reader/7545146206964433470
+            - generic [ref=e611]: 
+          - generic [ref=e612]:
+            - link "第174章 撬墙角！" [ref=e613] [cursor=pointer]:
+              - /url: /reader/7545489979179287102
+            - generic [ref=e614]: 
+          - generic [ref=e615]:
+            - link "第175章 押入死牢！" [ref=e616] [cursor=pointer]:
+              - /url: /reader/7545511282183504446
+            - generic [ref=e617]: 
+          - generic [ref=e618]:
+            - link "第176章 靠山不愧是靠山~" [ref=e619] [cursor=pointer]:
+              - /url: /reader/7545869857942667800
+            - generic [ref=e620]: 
+          - generic [ref=e621]:
+            - link "第177章 “这算什么，裴惊絮？”" [ref=e622] [cursor=pointer]:
+              - /url: /reader/7545887958692282904
+            - generic [ref=e623]: 
+          - generic [ref=e624]:
+            - link "第178章 阿絮很想您~" [ref=e625] [cursor=pointer]:
+              - /url: /reader/7546237302729622040
+            - generic [ref=e626]: 
+          - generic [ref=e627]:
+            - link "第179章 何为权臣" [ref=e628] [cursor=pointer]:
+              - /url: /reader/7546262125874774552
+            - generic [ref=e629]: 
+          - generic [ref=e630]:
+            - link "第180章 圆房" [ref=e631] [cursor=pointer]:
+              - /url: /reader/7546606477583073854
+            - generic [ref=e632]: 
+          - generic [ref=e633]:
+            - link "第181章 “二郎是谁？”" [ref=e634] [cursor=pointer]:
+              - /url: /reader/7546629049267798590
+            - generic [ref=e635]: 
+          - generic [ref=e636]:
+            - link "第182章 “那就好好表现。”" [ref=e637] [cursor=pointer]:
+              - /url: /reader/7546982917570822681
+            - generic [ref=e638]: 
+          - generic [ref=e639]:
+            - link "第183章 他送的“礼物”" [ref=e640] [cursor=pointer]:
+              - /url: /reader/7547000182932505113
+            - generic [ref=e641]: 
+          - generic [ref=e642]:
+            - link "第184章 “臣拒绝。”" [ref=e643] [cursor=pointer]:
+              - /url: /reader/7547348528016654873
+            - generic [ref=e644]: 
+          - generic [ref=e645]:
+            - link "第185章 铲除裴惊絮！" [ref=e646] [cursor=pointer]:
+              - /url: /reader/7547370726538347033
+            - generic [ref=e647]: 
+          - generic [ref=e648]:
+            - link "第186章 诬陷！" [ref=e649] [cursor=pointer]:
+              - /url: /reader/7547721851720450585
+            - generic [ref=e650]: 
+          - generic [ref=e651]:
+            - link "第187章 公子他出事了！" [ref=e652] [cursor=pointer]:
+              - /url: /reader/7547736395624743449
+            - generic [ref=e653]: 
+          - generic [ref=e654]:
+            - link "第188章 她穿了那件" [ref=e655] [cursor=pointer]:
+              - /url: /reader/7548091325908779545
+            - generic [ref=e656]: 
+          - generic [ref=e657]:
+            - link "第189章 她离不开我的" [ref=e658] [cursor=pointer]:
+              - /url: /reader/7548110548160758297
+            - generic [ref=e659]: 
+          - generic [ref=e660]:
+            - link "第190章 隐秘情事" [ref=e661] [cursor=pointer]:
+              - /url: /reader/7548463032557371929
+            - generic [ref=e662]: 
+          - generic [ref=e663]:
+            - link "第191章 替她揉腰" [ref=e664] [cursor=pointer]:
+              - /url: /reader/7548484465752801817
+            - generic [ref=e665]: 
+          - generic [ref=e666]:
+            - link "第192章 阿絮，我送你的手链呢？" [ref=e667] [cursor=pointer]:
+              - /url: /reader/7548830072438784537
+            - generic [ref=e668]: 
+          - generic [ref=e669]:
+            - link "第193章 哄容谏雪小能手！" [ref=e670] [cursor=pointer]:
+              - /url: /reader/7548857350711427609
+            - generic [ref=e671]: 
+          - generic [ref=e672]:
+            - link "第194章 少傅大人吃醋了" [ref=e673] [cursor=pointer]:
+              - /url: /reader/7549208753497719320
+            - generic [ref=e674]: 
+          - generic [ref=e675]:
+            - link "第195章 他与神佛不同" [ref=e676] [cursor=pointer]:
+              - /url: /reader/7549227412647576088
+            - generic [ref=e677]: 
+          - generic [ref=e678]:
+            - link "第196章 少傅大人就没有私心吗？" [ref=e679] [cursor=pointer]:
+              - /url: /reader/7549579792576676377
+            - generic [ref=e680]: 
+          - generic [ref=e681]:
+            - link "第197章 他也有私心" [ref=e682] [cursor=pointer]:
+              - /url: /reader/7549597845658026521
+            - generic [ref=e683]: 
+          - generic [ref=e684]:
+            - link "第198章 求菩萨保佑~" [ref=e685] [cursor=pointer]:
+              - /url: /reader/7549950630022890046
+            - generic [ref=e686]: 
+          - generic [ref=e687]:
+            - link "第199章 和离" [ref=e688] [cursor=pointer]:
+              - /url: /reader/7549968372528595518
+            - generic [ref=e689]: 
+          - generic [ref=e690]:
+            - link "第200章 “你只能选我。”" [ref=e691] [cursor=pointer]:
+              - /url: /reader/7550322712971838014
+            - generic [ref=e692]: 
+          - generic [ref=e693]:
+            - link "第201章 我们要个孩子好不好……" [ref=e694] [cursor=pointer]:
+              - /url: /reader/7550340754921505342
+            - generic [ref=e695]: 
+          - generic [ref=e696]:
+            - link "第202章 倘若阿絮说不呢？" [ref=e697] [cursor=pointer]:
+              - /url: /reader/7550694927991063065
+            - generic [ref=e698]: 
+          - generic [ref=e699]:
+            - link "第203章 “裴惊絮，这不公平。”" [ref=e700] [cursor=pointer]:
+              - /url: /reader/7550713632435225113
+            - generic [ref=e701]: 
+          - generic [ref=e702]:
+            - link "第204章 “阿絮，求你。”" [ref=e703] [cursor=pointer]:
+              - /url: /reader/7551069563585053209
+            - generic [ref=e704]: 
+          - generic [ref=e705]:
+            - link "第205章 “夫君……”" [ref=e706] [cursor=pointer]:
+              - /url: /reader/7551083380729725465
+            - generic [ref=e707]: 
+          - generic [ref=e708]:
+            - link "第206章 “她该罚。”" [ref=e709] [cursor=pointer]:
+              - /url: /reader/7551434862494761497
+            - generic [ref=e710]: 
+          - generic [ref=e711]:
+            - link "第207章 “裴惊絮，你应当心疼我。”" [ref=e712] [cursor=pointer]:
+              - /url: /reader/7551456284109701657
+            - generic [ref=e713]: 
+          - generic [ref=e714]:
+            - link "第208章 阿姐……" [ref=e715] [cursor=pointer]:
+              - /url: /reader/7551807358599447065
+            - generic [ref=e716]: 
+          - generic [ref=e717]:
+            - link "第209章 我只信阿姐" [ref=e718] [cursor=pointer]:
+              - /url: /reader/7551825613472940569
+            - generic [ref=e719]: 
+          - generic [ref=e720]:
+            - link "第210章 庸脂俗粉，上不得台面" [ref=e721] [cursor=pointer]:
+              - /url: /reader/7552183347343016472
+            - generic [ref=e722]: 
+          - generic [ref=e723]:
+            - link "第211章 求子药！？" [ref=e724] [cursor=pointer]:
+              - /url: /reader/7552198715469988376
+            - generic [ref=e725]: 
+          - generic [ref=e726]:
+            - link "第212章 替少傅大人赐婚？" [ref=e727] [cursor=pointer]:
+              - /url: /reader/7552555320069849625
+            - generic [ref=e728]: 
+          - generic [ref=e729]:
+            - link "第213章 爱是占有" [ref=e730] [cursor=pointer]:
+              - /url: /reader/7552570077690741273
+            - generic [ref=e731]: 
+          - generic [ref=e732]:
+            - link "第214章 裴氏她早就该死了！" [ref=e733] [cursor=pointer]:
+              - /url: /reader/7552918479561556504
+            - generic [ref=e734]: 
+          - generic [ref=e735]:
+            - link "第215章 “喜欢小的？”" [ref=e736] [cursor=pointer]:
+              - /url: /reader/7552939618811789848
+            - generic [ref=e737]: 
+          - generic [ref=e738]:
+            - link "第216章 我们成婚。" [ref=e739] [cursor=pointer]:
+              - /url: /reader/7553291351278748184
+            - generic [ref=e740]: 
+          - generic [ref=e741]:
+            - link "第217章 他配不上你" [ref=e742] [cursor=pointer]:
+              - /url: /reader/7553292859466580504
+            - generic [ref=e743]: 
+          - generic [ref=e744]:
+            - link "第218章 “我已有未婚妻室。”" [ref=e745] [cursor=pointer]:
+              - /url: /reader/7553660111311356440
+            - generic [ref=e746]: 
+          - generic [ref=e747]:
+            - link "第219章 为什么不分辩" [ref=e748] [cursor=pointer]:
+              - /url: /reader/7553683749142020632
+            - generic [ref=e749]: 
+          - generic [ref=e750]:
+            - link "第220章 “帮我系腰带。”" [ref=e751] [cursor=pointer]:
+              - /url: /reader/7553688694880731673
+            - generic [ref=e752]: 
+          - generic [ref=e753]:
+            - link "第221章 权力真是个好东西~" [ref=e754] [cursor=pointer]:
+              - /url: /reader/7554052645552390681
+            - generic [ref=e755]: 
+          - generic [ref=e756]:
+            - link "第222章 阿絮，跟我回家……" [ref=e757] [cursor=pointer]:
+              - /url: /reader/7554405939030262296
+            - generic [ref=e758]: 
+          - generic [ref=e759]:
+            - link "第223章 容玄舟，我不要你了" [ref=e760] [cursor=pointer]:
+              - /url: /reader/7554420757841855000
+            - generic [ref=e761]: 
+          - generic [ref=e762]:
+            - link "第224章 夫君他不行……" [ref=e763] [cursor=pointer]:
+              - /url: /reader/7554775396768563736
+            - generic [ref=e764]: 
+          - generic [ref=e765]:
+            - link "第225章 他在嫉妒" [ref=e766] [cursor=pointer]:
+              - /url: /reader/7554794382151402008
+            - generic [ref=e767]: 
+          - generic [ref=e768]:
+            - link "第226章 你只会依附男人！" [ref=e769] [cursor=pointer]:
+              - /url: /reader/7555148361100182078
+            - generic [ref=e770]: 
+          - generic [ref=e771]:
+            - link "第227章 “裴惊絮，怎么在生气？”" [ref=e772] [cursor=pointer]:
+              - /url: /reader/7555163961419645502
+            - generic [ref=e773]: 
+          - generic [ref=e774]:
+            - link "第228章 “裴惊絮，不要迁怒我。”" [ref=e775] [cursor=pointer]:
+              - /url: /reader/7555523132006613529
+            - generic [ref=e776]: 
+          - generic [ref=e777]:
+            - link "第229章 到底谁不行？" [ref=e778] [cursor=pointer]:
+              - /url: /reader/7555538122507829785
+            - generic [ref=e779]: 
+          - generic [ref=e780]:
+            - link "第230章 这个容谏雪在乎~" [ref=e781] [cursor=pointer]:
+              - /url: /reader/7555890027729781272
+            - generic [ref=e782]: 
+          - generic [ref=e783]:
+            - link "第231章 做戏" [ref=e784] [cursor=pointer]:
+              - /url: /reader/7555907282232410648
+            - generic [ref=e785]: 
+          - generic [ref=e786]:
+            - link "第232章 容谏雪忠于裴惊絮" [ref=e787] [cursor=pointer]:
+              - /url: /reader/7556260785253515801
+            - generic [ref=e788]: 
+          - generic [ref=e789]:
+            - link "第233章 来陪我们吧……" [ref=e790] [cursor=pointer]:
+              - /url: /reader/7556280346430423577
+            - generic [ref=e791]: 
+          - generic [ref=e792]:
+            - link "第234章 裴惊絮，我会取代你" [ref=e793] [cursor=pointer]:
+              - /url: /reader/7556633482655433240
+            - generic [ref=e794]: 
+          - generic [ref=e795]:
+            - link "第235章 逃出京城？" [ref=e796] [cursor=pointer]:
+              - /url: /reader/7556634474629300760
+            - generic [ref=e797]: 
+          - generic [ref=e798]:
+            - link "第236章 他的理智与疯狂" [ref=e799] [cursor=pointer]:
+              - /url: /reader/7557002924522488345
+            - generic [ref=e800]: 
+          - generic [ref=e801]:
+            - link "第237章 裴惊絮逃了！" [ref=e802] [cursor=pointer]:
+              - /url: /reader/7557021514378265113
+            - generic [ref=e803]: 
+          - generic [ref=e804]:
+            - link "第238章 阿姐，你最重要。" [ref=e805] [cursor=pointer]:
+              - /url: /reader/7557375701347729982
+            - generic [ref=e806]: 
+          - generic [ref=e807]:
+            - link "第239章 谁家还没死过丈夫了！" [ref=e808] [cursor=pointer]:
+              - /url: /reader/7557394849641546302
+            - generic [ref=e809]: 
+          - generic [ref=e810]:
+            - link "第240章 给她说媒！" [ref=e811] [cursor=pointer]:
+              - /url: /reader/7557739275500913176
+            - generic [ref=e812]: 
+          - generic [ref=e813]:
+            - link "第241章 她看着很像大善人吗？" [ref=e814] [cursor=pointer]:
+              - /url: /reader/7557763042314830360
+            - generic [ref=e815]: 
+          - generic [ref=e816]:
+            - link "第242章 是谁？" [ref=e817] [cursor=pointer]:
+              - /url: /reader/7558116570933772862
+            - generic [ref=e818]: 
+          - generic [ref=e819]:
+            - link "第243章 我们是该有个孩子了" [ref=e820] [cursor=pointer]:
+              - /url: /reader/7558138989731922494
+            - generic [ref=e821]: 
+          - generic [ref=e822]:
+            - link "第244章 “我与她，没有两清一说。”" [ref=e823] [cursor=pointer]:
+              - /url: /reader/7558486200990827070
+            - generic [ref=e824]: 
+          - generic [ref=e825]:
+            - link "第245章 我的未婚妻室" [ref=e826] [cursor=pointer]:
+              - /url: /reader/7558506524344058430
+            - generic [ref=e827]: 
+          - generic [ref=e828]:
+            - link "第246章 容谏雪，我们谈谈。" [ref=e829] [cursor=pointer]:
+              - /url: /reader/7558864401827119641
+            - generic [ref=e830]: 
+          - generic [ref=e831]:
+            - link "第247章 我们……还要成婚？" [ref=e832] [cursor=pointer]:
+              - /url: /reader/7558878879369134617
+            - generic [ref=e833]: 
+          - generic [ref=e834]:
+            - link "第248章 你喜欢容谏雪吗？" [ref=e835] [cursor=pointer]:
+              - /url: /reader/7559233598583210558
+            - generic [ref=e836]: 
+          - generic [ref=e837]:
+            - link "第249章 随我回京" [ref=e838] [cursor=pointer]:
+              - /url: /reader/7559251791641051710
+            - generic [ref=e839]: 
+          - generic [ref=e840]:
+            - link "第250章 听说你到处说我死了？" [ref=e841] [cursor=pointer]:
+              - /url: /reader/7559601485739196952
+            - generic [ref=e842]: 
+          - generic [ref=e843]:
+            - link "第251章 如何杀她？" [ref=e844] [cursor=pointer]:
+              - /url: /reader/7559618822257263128
+            - generic [ref=e845]: 
+          - generic [ref=e846]:
+            - link "第252章 “裴惊絮，吻我。”" [ref=e847] [cursor=pointer]:
+              - /url: /reader/7559971707121844761
+            - generic [ref=e848]: 
+          - generic [ref=e849]:
+            - link "第253章 使唤容谏雪！" [ref=e850] [cursor=pointer]:
+              - /url: /reader/7559985559368630809
+            - generic [ref=e851]: 
+          - generic [ref=e852]:
+            - link "第254章 阿絮，我后悔了。" [ref=e853] [cursor=pointer]:
+              - /url: /reader/7560343358611128894
+            - generic [ref=e854]: 
+          - generic [ref=e855]:
+            - link "第255章 兵临城下！" [ref=e856] [cursor=pointer]:
+              - /url: /reader/7560361446966575641
+            - generic [ref=e857]: 
+          - generic [ref=e858]:
+            - link "第256章 阿姐，我长大了" [ref=e859] [cursor=pointer]:
+              - /url: /reader/7560714543639298585
+            - generic [ref=e860]: 
+          - generic [ref=e861]:
+            - link "第257章 你有多爱我？" [ref=e862] [cursor=pointer]:
+              - /url: /reader/7560734416713024025
+            - generic [ref=e863]: 
+          - generic [ref=e864]:
+            - link "第258章 “神佛为证，我心不移。”" [ref=e865] [cursor=pointer]:
+              - /url: /reader/7561088228338434584
+            - generic [ref=e866]: 
+          - generic [ref=e867]:
+            - link "第259章 “此心既许，万般皆虚。”" [ref=e868] [cursor=pointer]:
+              - /url: /reader/7561105121241743896
+            - generic [ref=e869]: 
+          - generic [ref=e870]:
+            - link "第260章 天子驾崩！" [ref=e871] [cursor=pointer]:
+              - /url: /reader/7561462567374160446
+            - generic [ref=e872]: 
+          - generic [ref=e873]:
+            - link "第261章 驯化（大结局）" [ref=e874] [cursor=pointer]:
+              - /url: /reader/7561480781026050622
+            - generic [ref=e875]: 
+          - generic [ref=e876]:
+            - link "番外 日常：龙凤呈祥" [ref=e877] [cursor=pointer]:
+              - /url: /reader/7562609765348540952
+            - generic [ref=e878]: 
+          - generic [ref=e879]:
+            - link "番外 容谏雪：落雪有声" [ref=e880] [cursor=pointer]:
+              - /url: /reader/7570630245250777625
+            - generic [ref=e881]: 
+    - generic [ref=e882]:
+      - link " 番茄小说" [ref=e883] [cursor=pointer]:
+        - /url: https://www.changdunovel.com/
+        - generic [ref=e884]:
+          - generic [ref=e885]: 
+          - generic [ref=e886]: 番茄小说
+      - link " 帮助中心" [ref=e887] [cursor=pointer]:
+        - /url: /writer/zone/help
+        - generic [ref=e888]:
+          - generic [ref=e889]: 
+          - generic [ref=e890]: 帮助中心
+      - link " 作家助手" [ref=e891] [cursor=pointer]:
+        - /url: /author-helper
+        - generic [ref=e892]:
+          - generic [ref=e893]: 
+          - generic [ref=e894]: 作家助手
+  - generic [ref=e896]:
+    - generic [ref=e897]:
+      - generic [ref=e898]:
+        - img [ref=e900]
+        - link "《番茄小说网用户协议》" [ref=e926] [cursor=pointer]:
+          - /url: /protocal/agreement
+        - link "《番茄小说网隐私政策》" [ref=e927] [cursor=pointer]:
+          - /url: /protocal/privacy
+        - paragraph [ref=e928]: © 2026 北京时光荏苒科技有限公司
+      - generic [ref=e929]:
+        - link "京ICP备18018851号-8" [ref=e930] [cursor=pointer]:
+          - /url: https://beian.miit.gov.cn/#/Integrated/index
+        - link "京公网安备 11010802030409号" [ref=e931] [cursor=pointer]:
+          - /url: http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=11010802030409
+          - text: 京公网安备 11010802030409号
+        - link "京ICP证 京B2-20200085" [ref=e933] [cursor=pointer]:
+          - /url: https://fanqienovel.com/writer/zone/licence/icp
+        - generic [ref=e934]:
+          - link "营业执照" [ref=e935] [cursor=pointer]:
+            - /url: https://fanqienovel.com/writer/zone/licence/business
+          - link "出版物经营许可证" [ref=e936] [cursor=pointer]:
+            - /url: https://fanqienovel.com/writer/zone/licence/publication
+          - link "广播电视节目制作经营许可证" [ref=e937] [cursor=pointer]:
+            - /url: https://fanqienovel.com/writer/zone/licence/radioTv
+        - generic [ref=e938]:
+          - paragraph [ref=e939]:
+            - text: 广告投放：
+            - link "www.oceanengine.com" [ref=e940] [cursor=pointer]:
+              - /url: https://www.oceanengine.com/resource/fanqie?source=fanqiepc
+          - paragraph [ref=e941]: 不良信息举报：fanqiejubao@bytedance.com
+          - paragraph [ref=e942]: 意见建议邮箱：original_articles@bytedance.com
+          - paragraph [ref=e943]: 版权咨询：2947820142@qq.com
+    - generic [ref=e944]:
+      - generic [ref=e945]:
+        - img [ref=e946]
+        - generic [ref=e947]: 打开微信扫码关注微信公众号
+      - generic [ref=e948]:
+        - img [ref=e949]
+        - generic [ref=e950]: 打开抖音扫码关注官方帐号
