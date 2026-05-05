@@ -28,7 +28,7 @@ from shared import (
     # Geetest
     geetest_status_store, set_geetest_status, get_geetest_status,
     # API
-    API_SECRET_KEY, verify_api_key,
+    API_SECRET_KEY, verify_api_key, API_PREFIXES,
     # Helpers
     serve_frontend, _execute_password_login, process_qr_login_cookies,
     _fallback_save_qr_cookie, _handle_feishu_command, load_keywords,

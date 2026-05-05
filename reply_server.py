@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from loguru import logger
 
-from shared import db_manager, CAPTCHA_ROUTER_AVAILABLE, setup_file_logging, serve_frontend
+from shared import db_manager, CAPTCHA_ROUTER_AVAILABLE, setup_file_logging, serve_frontend, API_PREFIXES
 
 # 刮刮乐路由（条件导入）
 if CAPTCHA_ROUTER_AVAILABLE:
@@ -137,10 +137,7 @@ else:
 
 
 # ============ Catch-all 路由 ============
-# 必须放在所有 API 路由之后，用于处理前端 SPA 的直接访问
-
-API_PREFIXES = ['/api/', '/static/', '/health', '/login', '/logout', '/register',
-                '/verify', '/check-default-password', '/change-password', '/change-admin-password']
+# Catch-all 路由：处理所有未匹配的 GET 请求，用于前端 SPA
 
 @app.get('/{path:path}', response_class=HTMLResponse)
 async def catch_all_route(path: str):

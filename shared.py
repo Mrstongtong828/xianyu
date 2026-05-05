@@ -43,6 +43,10 @@ except Exception as e:
     logger.warning(f"api_captcha_remote 模块加载失败: {e}")
     CAPTCHA_ROUTER_AVAILABLE = False
 
+# 固定的API秘钥（生产环境中应该从配置文件或环境变量读取）
+# 注意：现在从系统设置中读取QQ回复消息秘钥
+API_SECRET_KEY = "xianyu_api_secret_2024"  # 保留作为后备
+
 # 关键字文件路径
 KEYWORDS_FILE = Path(__file__).parent / "回复关键字.txt"
 
@@ -191,6 +195,9 @@ def log_with_user(level: str, message: str, user_info: Dict[str, Any] = None):
     else:
         logger.info(full_message)
 
+# 加载全局关键字映射
+KEYWORDS_MAPPING = load_keywords()
+
 def match_reply(cookie_id: str, message: str) -> Optional[str]:
     """根据 cookie_id 及消息内容匹配回复
     只有启用的账号才会匹配关键字回复
@@ -239,6 +246,7 @@ async def lifespan(app: FastAPI):
 
 async def serve_frontend():
     """服务 React 前端 SPA"""
+    static_dir = os.path.join(os.path.dirname(__file__), 'static')
     index_path = os.path.join(static_dir, 'index.html')
     if os.path.exists(index_path):
         with open(index_path, 'r', encoding='utf-8') as f:
@@ -895,6 +903,10 @@ class ResponseModel(BaseModel):
 
 
 _cleanup_task = None
+
+# API路由前缀列表，用于catch-all路由中识别API请求
+API_PREFIXES = ['/api/', '/static/', '/health', '/login', '/logout', '/register',
+                '/verify', '/check-default-password', '/change-password', '/change-admin-password']
 
 class ItemScheduleRequest(BaseModel):
     cookie_id: str

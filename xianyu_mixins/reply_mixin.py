@@ -13,6 +13,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from XianyuAutoAsync import ConnectionState
 
+from XianyuAutoAsync import ConnectionState
 from config import WEBSOCKET_HEADERS
 
 
