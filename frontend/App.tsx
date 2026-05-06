@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Sidebar from './components/Sidebar';
+import ErrorBoundary from './components/ErrorBoundary';
 import { login, verifyToken } from './services/api';
 import { ShieldCheck, ArrowRight, Loader2, User, Lock } from 'lucide-react';
 import { ThemeProvider } from './context/ThemeContext';
@@ -37,7 +38,13 @@ const App: React.FC = () => {
       const token = localStorage.getItem('auth_token');
       if (token) {
           verifyToken()
-            .then(() => setIsLoggedIn(true))
+            .then((res) => {
+              if (res && res.authenticated) {
+                setIsLoggedIn(true);
+              } else {
+                localStorage.removeItem('auth_token');
+              }
+            })
             .catch(() => localStorage.removeItem('auth_token'))
             .finally(() => setCheckingAuth(false));
       } else {
@@ -170,7 +177,13 @@ const App: React.FC = () => {
         default: return <Dashboard />;
       }
     })();
-    return <Suspense fallback={<PageFallback />}>{content}</Suspense>;
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <ErrorBoundary>
+          {content}
+        </ErrorBoundary>
+      </Suspense>
+    );
   };
 
   return (

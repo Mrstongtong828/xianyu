@@ -906,7 +906,8 @@ _cleanup_task = None
 
 # API路由前缀列表，用于catch-all路由中识别API请求
 API_PREFIXES = ['/api/', '/static/', '/health', '/login', '/logout', '/register',
-                '/verify', '/check-default-password', '/change-password', '/change-admin-password']
+                '/verify', '/check-default-password', '/change-password', '/change-admin-password',
+                '/analytics']
 
 class ItemScheduleRequest(BaseModel):
     cookie_id: str

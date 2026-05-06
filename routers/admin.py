@@ -1323,6 +1323,7 @@ def get_user_setting(key: str, current_user: Dict[str, Any] = Depends(get_curren
         raise HTTPException(status_code=500, detail="内部服务器错误")
 
 
+@router.get("/api/ai-conversations")
 async def get_ai_conversations(
     cookie_id: Optional[str] = None,
     chat_id: Optional[str] = None,
