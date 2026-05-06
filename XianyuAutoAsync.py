@@ -221,6 +221,16 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
             except:
                 return "未知错误"
 
+    async def update_config_cookies(self):
+        """将当前cookies保存到数据库"""
+        try:
+            self.cookies_str = '; '.join([f"{k}={v}" for k, v in self.cookies.items()])
+            from db_manager import db_manager
+            db_manager.update_cookie_account_info(self.cookie_id, cookie_value=self.cookies_str)
+            logger.info(f"【{self.cookie_id}】Cookie已更新到数据库")
+        except Exception as e:
+            logger.error(f"【{self.cookie_id}】更新Cookie到数据库失败: {self._safe_str(e)}")
+
     async def _interruptible_sleep(self, duration: float):
         """可中断的sleep，将长时间sleep拆分成多个短时间sleep，以便及时响应取消信号
         
