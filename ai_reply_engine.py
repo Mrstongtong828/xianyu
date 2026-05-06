@@ -21,6 +21,53 @@ from openai import OpenAI
 from db_manager import db_manager
 
 
+class _TimedLRUCache:
+    """线程安全的带TTL的LRU缓存"""
+    def __init__(self, maxsize: int = 16, ttl: float = 300):
+        self._cache: dict = {}          # key -> (value, expire_at)
+        self._order: list = []          # LRU顺序
+        self._lock = threading.Lock()
+        self._maxsize = maxsize
+        self._ttl = ttl
+
+    def get(self, key):
+        with self._lock:
+            if key in self._cache:
+                val, exp = self._cache[key]
+                if time.time() < exp:
+                    # 移到末尾（最近使用）
+                    self._order.remove(key)
+                    self._order.append(key)
+                    return val
+                else:
+                    del self._cache[key]
+                    self._order.remove(key)
+            return None
+
+    def put(self, key, value):
+        with self._lock:
+            if key in self._cache:
+                self._order.remove(key)
+            elif len(self._cache) >= self._maxsize:
+                oldest = self._order.pop(0)
+                del self._cache[oldest]
+            self._cache[key] = (value, time.time() + self._ttl)
+            self._order.append(key)
+
+    def clear(self, key=None):
+        with self._lock:
+            if key:
+                if key in self._cache:
+                    del self._cache[key]
+                    self._order.remove(key)
+            else:
+                self._cache.clear()
+                self._order.clear()
+
+
+_client_cache = _TimedLRUCache(maxsize=16, ttl=300)
+
+
 class AIReplyEngine:
     """AI回复引擎"""
     
@@ -60,20 +107,22 @@ class AIReplyEngine:
         }
     
     def _create_openai_client(self, cookie_id: str) -> Optional[OpenAI]:
-        """
-        (原 get_client) 创建指定账号的OpenAI客户端
-        修复 P0-2: 移除了缓存逻辑，以支持多进程无状态部署
-        """
+        """创建指定账号的OpenAI客户端，带TTL缓存（容量16、5分钟）"""
+        cached = _client_cache.get(cookie_id)
+        if cached is not None:
+            return cached
+
         settings = db_manager.get_ai_reply_settings(cookie_id)
         if not settings['ai_enabled'] or not settings['api_key']:
             return None
-        
+
         try:
             logger.info(f"创建新的OpenAI客户端实例 {cookie_id}: base_url={settings['base_url']}, api_key={'***' + settings['api_key'][-4:] if settings['api_key'] else 'None'}")
             client = OpenAI(
                 api_key=settings['api_key'],
                 base_url=settings['base_url']
             )
+            _client_cache.put(cookie_id, client)
             logger.info(f"为账号 {cookie_id} 创建OpenAI客户端成功，实际base_url: {client.base_url}")
             return client
         except Exception as e:

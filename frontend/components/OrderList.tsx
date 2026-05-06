@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Order, OrderStatus, Item } from '../types';
 import { getOrders, syncOrders, syncSingleOrder, manualShipOrder, updateOrder, deleteOrder, importOrders, getItems } from '../services/api';
@@ -31,12 +31,24 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
 };
 
 const OrderList: React.FC = () => {
+  const STORAGE_KEY = 'order_list_form';
+  const savedForm = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+
   const [orders, setOrders] = useState<Order[]>([]);
-  const [allOrders, setAllOrders] = useState<Order[]>([]); // 保存所有订单用于搜索
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [itemNames, setItemNames] = useState<Record<string, string>>({});
-  const [filter, setFilter] = useState('all');
-  const [searchText, setSearchText] = useState(''); // 搜索文本
+  const [filter, setFilter] = useState(savedForm.filter || 'all');
+  const [searchText, setSearchText] = useState(savedForm.searchText || '');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ filter, searchText }));
+    }, 300);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [filter, searchText]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -151,14 +163,13 @@ const OrderList: React.FC = () => {
           return matchingItem.item_title;
       }
 
-      return '未知商品';
+      return orderId || '未知商品';
   };
 
   // 从商品列表构建商品ID到商品名的映射
-  const buildItemNamesMap = () => {
+  const buildItemNamesMap = (itemsList: Item[]) => {
       const namesMap: Record<string, string> = {};
-      items.forEach(item => {
-          // 使用 item_id 作为键，商品标题作为值
+      itemsList.forEach(item => {
           if (item.item_id) {
               namesMap[item.item_id] = item.item_title || item.item_id;
           }
@@ -171,7 +182,7 @@ const OrderList: React.FC = () => {
     // 加载商品列表
     getItems().then((itemsList) => {
       setItems(itemsList);
-      buildItemNamesMap();
+      buildItemNamesMap(itemsList);
     }).catch((e) => {
       console.error('加载商品列表失败:', e);
     });

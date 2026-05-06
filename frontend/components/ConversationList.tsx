@@ -12,24 +12,107 @@ const roleStyles: Record<string, { bg: string; text: string; icon: React.ReactNo
 };
 
 const ConversationList: React.FC = () => {
+  const STORAGE_KEY = 'conversation_list_form';
+  const savedForm = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+
   const [chats, setChats] = useState<AIChatSummary[]>([]);
+  const [allChats, setAllChats] = useState<AIChatSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AIConversation[]>([]);
-  const [searchText, setSearchText] = useState('');
+  const [searchText, setSearchText] = useState(savedForm.searchText || '');
+  const searchTextRef = useRef(savedForm.searchText || '');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
-  const msgEndRef = useRef<HTMLDivElement>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
+  const REFRESH_INTERVAL = 8000;
+  const msgTopRef = useRef<HTMLDivElement>(null);
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedChatIdRef = useRef<string | null>(null);
+  const pageRef = useRef(1);
+  const shouldScrollToTop = useRef(false);
+  const loadChatsSilentRef = useRef<() => Promise<void>>(undefined!);
+  const loadMessagesSilentRef = useRef<(chatId: string, p: number) => Promise<void>>(undefined!);
+
+  useEffect(() => {
+    selectedChatIdRef.current = selectedChatId;
+  }, [selectedChatId]);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  useEffect(() => {
+    if (!autoRefresh) {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current);
+        autoRefreshRef.current = null;
+      }
+      return;
+    }
+
+    autoRefreshRef.current = setInterval(() => {
+      loadChatsSilentRef.current();
+      if (selectedChatIdRef.current) {
+        loadMessagesSilentRef.current(selectedChatIdRef.current, pageRef.current);
+      }
+    }, REFRESH_INTERVAL);
+
+    return () => {
+      if (autoRefreshRef.current) {
+        clearInterval(autoRefreshRef.current);
+        autoRefreshRef.current = null;
+      }
+    };
+  }, [autoRefresh]);
+
+  const filterChats = (list: AIChatSummary[], filter: string) => {
+    if (!filter.trim()) return list;
+    const s = filter.trim().toLowerCase();
+    return list.filter(c => c.buyer_id?.toLowerCase().includes(s) || c.chat_id?.toLowerCase().includes(s));
+  };
+
+  const loadChatsSilent = async () => {
+    try {
+      const res = await getAIChatList();
+      if (res.success) {
+        const fullList = res.data || [];
+        setAllChats(fullList);
+        setChats(filterChats(fullList, searchTextRef.current));
+        setLastRefreshTime(new Date());
+      }
+    } catch (e) {
+      console.error('自动刷新对话列表失败:', e);
+    }
+  };
+  loadChatsSilentRef.current = loadChatsSilent;
+
+  const loadMessagesSilent = async (chatId: string, p: number) => {
+    try {
+      const res = await getAIConversations({ chat_id: chatId, page: p, page_size: pageSize });
+      if (res.success) {
+        setMessages(res.data || []);
+        setTotal(res.total || 0);
+        setLastRefreshTime(new Date());
+      }
+    } catch (e) {
+      console.error('自动刷新消息列表失败:', e);
+    }
+  };
+  loadMessagesSilentRef.current = loadMessagesSilent;
 
   const loadChats = async () => {
     setLoadingChats(true);
     try {
       const res = await getAIChatList();
       if (res.success) {
-        setChats(res.data || []);
+        const fullList = res.data || [];
+        setAllChats(fullList);
+        setChats(filterChats(fullList, searchText));
       }
     } catch (e) {
       console.error('加载对话列表失败:', e);
@@ -45,6 +128,9 @@ const ConversationList: React.FC = () => {
       if (res.success) {
         setMessages(res.data || []);
         setTotal(res.total || 0);
+        if (p === 1) {
+          shouldScrollToTop.current = true;
+        }
       }
     } catch (e) {
       console.error('加载消息失败:', e);
@@ -54,23 +140,25 @@ const ConversationList: React.FC = () => {
   };
 
   const handleSearch = async () => {
+    searchTextRef.current = searchText.trim();
     if (!searchText.trim()) {
-      loadChats();
+      setChats(allChats);
       return;
     }
     setLoadingChats(true);
     setSelectedChatId(null);
     setMessages([]);
     try {
-      const searchLower = searchText.trim().toLowerCase();
-      const filteredChats = chats.filter(
-        c => c.buyer_id?.toLowerCase().includes(searchLower) || c.chat_id?.toLowerCase().includes(searchLower)
-      );
-      setChats(filteredChats);
+      const filtered = filterChats(allChats, searchText);
+      setChats(filtered);
     } finally {
       setLoadingChats(false);
     }
   };
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ searchText }));
+  }, [searchText]);
 
   useEffect(() => {
     loadChats();
@@ -90,7 +178,9 @@ const ConversationList: React.FC = () => {
   }, [page]);
 
   useEffect(() => {
-    msgEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!shouldScrollToTop.current) return;
+    shouldScrollToTop.current = false;
+    msgTopRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const getRoleStyle = (role: string) => {
@@ -113,10 +203,38 @@ const ConversationList: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <div>
-        <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">对话记录</h2>
-        <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">查看AI与买家的历史对话详情。</p>
+      <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-4xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">被动回复记录</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">查看AI与买家的历史对话详情，了解自动回复和议价过程。</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { loadChats(); selectedChatId && page > 1 ? setPage(1) : selectedChatId && loadMessages(selectedChatId, page); }}
+            className="p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 transition-colors"
+            title="手动刷新"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+              autoRefresh
+                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+            title={autoRefresh ? '自动刷新中（每8秒）' : '自动刷新已暂停'}
+          >
+            <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+            {autoRefresh ? '实时更新中' : '已暂停'}
+          </button>
+          {lastRefreshTime && (
+            <span className="text-xs text-gray-400">
+              最后更新: {formatTime(lastRefreshTime.toISOString())}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="ios-card rounded-[2rem] overflow-hidden shadow-lg border-0 bg-white dark:bg-gray-900 flex flex-col md:flex-row" style={{ height: 'calc(100vh - 200px)', minHeight: '600px' }}>
@@ -215,6 +333,7 @@ const ConversationList: React.FC = () => {
 
               {/* Messages body */}
               <div className="flex-1 overflow-y-auto p-6 bg-[#FAFAFA] space-y-4">
+                <div ref={msgTopRef} />
                 {loadingMsgs ? (
                   <div className="flex items-center justify-center py-20">
                     <RefreshCw className="w-6 h-6 text-[#FFE815] animate-spin" />
@@ -256,10 +375,8 @@ const ConversationList: React.FC = () => {
                     );
                   })
                 )}
-                <div ref={msgEndRef} />
-              </div>
+                </div>
 
-              {/* Pagination */}
               <div className="p-4 border-t border-gray-100 flex items-center justify-between bg-white">
                 <div className="text-sm text-gray-500 font-medium">
                   第 {page} 页 / 共 {totalPages} 页 (共 {total} 条)

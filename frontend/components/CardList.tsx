@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Card } from '../types';
 import { getCards, createCard, updateCard, deleteCard, batchImportCards } from '../services/api';
-import { Plus, CreditCard, Clock, FileText, Image as ImageIcon, Code, Edit, Trash2, Save, X, Eye, EyeOff, Package, Upload } from 'lucide-react';
+import { Plus, CreditCard, Clock, FileText, Image as ImageIcon, Code, Edit, Trash2, Save, X, Eye, EyeOff, Package, Upload, FileUp } from 'lucide-react';
 
 const CardList: React.FC = () => {
   const [cards, setCards] = useState<Card[]>([]);
@@ -22,6 +22,8 @@ const CardList: React.FC = () => {
   const [batchImportCsv, setBatchImportCsv] = useState('');
   const [batchImportResult, setBatchImportResult] = useState<{ success: boolean; total: number; success_count: number; fail_count: number; errors: Array<{ row: number; error: string }> } | null>(null);
   const [batchImporting, setBatchImporting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getCards().then(setCards);
@@ -196,6 +198,46 @@ const CardList: React.FC = () => {
     }
   };
 
+  const handleFileDrop = (file: File) => {
+    if (!file.name.endsWith('.csv')) {
+      alert('请上传 CSV 格式的文件');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      setBatchImportCsv(text);
+      setBatchImportResult(null);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOver(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFileDrop(file);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
@@ -208,6 +250,7 @@ const CardList: React.FC = () => {
               onClick={() => {
                 setBatchImportCsv('');
                 setBatchImportResult(null);
+                setIsDragOver(false);
                 setShowBatchImportModal(true);
               }}
               className="ios-btn-primary flex items-center gap-2 px-6 py-3 rounded-2xl font-bold shadow-lg shadow-yellow-200 transition-transform hover:scale-105 active:scale-95"
@@ -745,7 +788,7 @@ const CardList: React.FC = () => {
             <div className="modal-header">
               <h3 className="text-2xl font-extrabold text-gray-900">批量导入卡券</h3>
               <button
-                onClick={() => setShowBatchImportModal(false)}
+                onClick={() => { setShowBatchImportModal(false); setIsDragOver(false); }}
                 className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
               >
                 <X className="w-5 h-5 text-gray-500" />
@@ -768,6 +811,42 @@ const CardList: React.FC = () => {
                   <p className="text-xs text-gray-500 mt-2 font-mono">
                     示例：example_card,text,这是卡券内容,这是描述,0
                   </p>
+                </div>
+
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  className={`relative border-2 border-dashed rounded-xl p-6 transition-colors cursor-pointer ${
+                    isDragOver
+                      ? 'border-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 bg-gray-50 hover:border-yellow-400 hover:bg-yellow-50/50'
+                  }`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileDrop(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <FileUp className={`w-8 h-8 ${isDragOver ? 'text-yellow-600' : 'text-gray-400'}`} />
+                    {isDragOver ? (
+                      <p className="text-sm font-bold text-yellow-600">释放文件以上传</p>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-gray-600">拖拽 CSV 文件到此处</p>
+                        <p className="text-xs text-gray-400">或点击此区域选择文件</p>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -808,7 +887,7 @@ const CardList: React.FC = () => {
             <div className="modal-footer">
               <div className="flex gap-3 w-full">
                 <button
-                  onClick={() => setShowBatchImportModal(false)}
+                  onClick={() => { setShowBatchImportModal(false); setIsDragOver(false); }}
                   className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                 >
                   取消

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Sidebar from './components/Sidebar';
 import { login, verifyToken } from './services/api';
-import { ShieldCheck, ArrowRight, Loader2, User, Lock, KeyRound } from 'lucide-react';
+import { ShieldCheck, ArrowRight, Loader2, User, Lock } from 'lucide-react';
 import { ThemeProvider } from './context/ThemeContext';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -14,6 +14,7 @@ const Keywords = lazy(() => import('./components/Keywords'));
 const Blacklist = lazy(() => import('./components/Blacklist'));
 const DeliveryRetryQueue = lazy(() => import('./components/DeliveryRetryQueue'));
 const ConversationList = lazy(() => import('./components/ConversationList'));
+const ActiveOutreach = lazy(() => import('./components/ActiveOutreach'));
 const ItemSchedule = lazy(() => import('./components/ItemSchedule'));
 const OperationLogs = lazy(() => import('./components/OperationLogs'));
 
@@ -68,14 +69,7 @@ const App: React.FC = () => {
       }
   };
 
-  const handleTestEntry = () => {
-      setLoginLoading(true);
-      setTimeout(() => {
-          localStorage.setItem('auth_token', 'test_token');
-          setIsLoggedIn(true);
-          setLoginLoading(false);
-      }, 800);
-  };
+
 
   if (checkingAuth) {
       return (
@@ -144,15 +138,6 @@ const App: React.FC = () => {
           </form>
           
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
-             <button 
-                type="button"
-                onClick={handleTestEntry}
-                disabled={loginLoading}
-                className="w-full bg-black dark:bg-white dark:text-black text-white h-14 rounded-2xl text-base font-bold shadow-lg shadow-gray-200 flex items-center justify-center gap-2 hover:bg-gray-800 dark:hover:bg-gray-200 transition-all active:scale-95"
-             >
-                <KeyRound className="w-5 h-5 text-[#FFE815]" />
-                游客试用 (无需账号)
-             </button>
              <div className="mt-6 text-center">
                  <span className="text-xs text-gray-400 dark:text-gray-500 font-medium tracking-widest uppercase">
                     Xianyu Auto-Dispatch Pro v2.5
@@ -176,6 +161,8 @@ const App: React.FC = () => {
         case 'keywords': return <Keywords />;
         case 'blacklist': return <Blacklist />;
         case 'conversations': return <ConversationList />;
+        case 'passive-reply': return <ConversationList />;
+        case 'active-outreach': return <ActiveOutreach />;
         case 'item-schedule': return <ItemSchedule />;
         case 'logs': return <OperationLogs />;
         case 'delivery-retry': return <DeliveryRetryQueue />;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getSystemSettings, updateSystemSettings, getAllAISettings, updateAccountAISettings } from '../services/api';
+import { getSystemSettings, updateSystemSettings } from '../services/api';
 import { SystemSettings } from '../types';
 import {
   Bot, Save, Lock, Sparkles, Mail, Settings as SettingsIcon,
@@ -7,40 +7,52 @@ import {
 } from 'lucide-react';
 
 const Settings: React.FC = () => {
-  const [settings, setSettings] = useState<SystemSettings | null>(null);
+  const STORAGE_KEY = 'settings_form';
+
+  const [settings, setSettings] = useState<SystemSettings | null>(() => {
+    try {
+      const cached = localStorage.getItem(STORAGE_KEY);
+      if (cached) return JSON.parse(cached) as SystemSettings;
+    } catch {}
+    return null;
+  });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Password visibility states
   const [showApiKey, setShowApiKey] = useState(false);
   const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [customModel, setCustomModel] = useState(false);
 
   useEffect(() => {
-    loadSettings();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => {
+    if (!settings) loadSettings();
   }, []);
+
+  const knownModels = ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-pro', 'qwen-plus', 'qwen-max', 'qwen-turbo', 'qwen3-235b-a22b', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 
   const loadSettings = () => {
     setLoading(true);
-    getSystemSettings().then(setSettings).finally(() => setLoading(false));
+    getSystemSettings().then(s => {
+      setSettings(s);
+    }).finally(() => setLoading(false));
   };
+
+  useEffect(() => {
+    if (settings?.ai_model) {
+      setCustomModel(!knownModels.includes(settings.ai_model));
+    }
+  }, [settings?.ai_model]);
 
   const handleSave = async () => {
       if(!settings) return;
       setSaving(true);
       try {
         await updateSystemSettings(settings);
-        // 同步全局模型/Key/URL到所有账号的AI设置
-        if (settings.ai_model || settings.ai_api_key || settings.ai_base_url) {
-          const allAI = await getAllAISettings();
-          await Promise.all(Object.entries(allAI).map(([cookieId, s]) =>
-            updateAccountAISettings(cookieId, {
-              ...s,
-              ...(settings.ai_model ? { model_name: settings.ai_model } : {}),
-              ...(settings.ai_api_key ? { api_key: settings.ai_api_key } : {}),
-              ...(settings.ai_base_url ? { base_url: settings.ai_base_url } : {}),
-            })
-          ));
-        }
+        localStorage.removeItem(STORAGE_KEY);
         alert('系统配置已保存');
       } catch (e) {
         alert('保存失败：' + (e as Error).message);
@@ -204,15 +216,56 @@ const Settings: React.FC = () => {
 
             <div className="ios-card rounded-[2rem] p-6 bg-white space-y-6">
               <div className="space-y-3">
+                <label className="block text-sm font-bold text-gray-800">服务提供商</label>
+                <div className="flex gap-2">
+                  {([
+                    { id: 'deepseek', label: 'DeepSeek', desc: 'deepseek-chat / R1' },
+                    { id: 'aliyun', label: '阿里云通义千问', desc: 'qwen-plus / qwen3' },
+                    { id: 'custom', label: '自定义', desc: '任意 OpenAI 兼容接口' },
+                  ] as const).map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        const urls: Record<string, string> = {
+                          aliyun: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                          deepseek: 'https://api.deepseek.com/v1',
+                        };
+                        const models: Record<string, string> = {
+                          aliyun: 'qwen-plus',
+                          deepseek: 'deepseek-chat',
+                        };
+                        setSettings({
+                          ...settings,
+                          ai_api_url: p.id !== 'custom' ? urls[p.id] : (settings.ai_api_url || ''),
+                          ai_model: p.id !== 'custom' ? models[p.id] : (settings.ai_model || ''),
+                        });
+                      }}
+                      className={`flex-1 p-3 rounded-xl border-2 text-left transition-all hover:border-gray-400 ${
+                        ((() => {
+                          const url = settings.ai_api_url || '';
+                          if (url.includes('deepseek')) return p.id === 'deepseek';
+                          if (url.includes('dashscope') || url.includes('aliyuncs')) return p.id === 'aliyun';
+                          return p.id === 'custom';
+                        })()) ? 'border-[#FFE815] bg-yellow-50' : 'border-gray-200 bg-gray-50'
+                      }`}
+                    >
+                      <div className="text-sm font-bold text-gray-800">{p.label}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{p.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
                 <label className="block text-sm font-bold text-gray-800">API 地址</label>
                 <input
                   type="text"
-                  value={settings.ai_api_url || 'https://dashscope.aliyuncs.com/compatible-mode/v1'}
+                  value={settings.ai_api_url || 'https://api.deepseek.com/v1'}
                   onChange={e => setSettings({...settings, ai_api_url: e.target.value})}
                   className="w-full ios-input px-4 py-3 rounded-xl text-sm"
-                  placeholder="https://api.openai.com/v1"
+                  placeholder="https://api.deepseek.com/v1"
                 />
-                <p className="text-xs text-gray-500">无需补全 /chat/completions</p>
+                <p className="text-xs text-gray-500">无需补全 /chat/completions，支持任意 OpenAI 兼容接口</p>
               </div>
 
               <div className="space-y-3">
@@ -238,29 +291,48 @@ const Settings: React.FC = () => {
               <div className="space-y-3">
                 <label className="block text-sm font-bold text-gray-800">模型</label>
                 <select
-                  value={settings.ai_model || 'qwen-plus'}
-                  onChange={e => setSettings({...settings, ai_model: e.target.value})}
+                  value={settings.ai_model || 'deepseek-chat'}
+                  onChange={e => {
+                    if (e.target.value === '__custom__') {
+                      setCustomModel(true);
+                    } else {
+                      setCustomModel(false);
+                      setSettings({...settings, ai_model: e.target.value});
+                    }
+                  }}
                   className="w-full ios-input px-4 py-3 rounded-xl"
                 >
-                  <optgroup label="通义千问">
-                    <option value="qwen-plus">通义千问 Plus</option>
-                    <option value="qwen-turbo">通义千问 Turbo</option>
-                    <option value="qwen-max">通义千问 Max</option>
-                  </optgroup>
                   <optgroup label="DeepSeek">
-                    <option value="deepseek-chat">DeepSeek Chat (V3)</option>
-                    <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
+                    <option value="deepseek-chat">DeepSeek V3 (deepseek-chat)</option>
+                    <option value="deepseek-reasoner">DeepSeek R1 (deepseek-reasoner)</option>
+                    <option value="deepseek-v4-pro">DeepSeek V4 Pro (deepseek-v4-pro)</option>
+                  </optgroup>
+                  <optgroup label="阿里云通义千问">
+                    <option value="qwen-plus">通义千问 Plus</option>
+                    <option value="qwen-max">通义千问 Max</option>
+                    <option value="qwen-turbo">通义千问 Turbo</option>
+                    <option value="qwen3-235b-a22b">通义千问 Qwen3-235B</option>
                   </optgroup>
                   <optgroup label="OpenAI">
                     <option value="gpt-4o">GPT-4o</option>
                     <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
                     <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
                   </optgroup>
-                  <optgroup label="Google">
-                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  <optgroup label="其他">
+                    <option value="__custom__">🔧 自定义模型名称...</option>
                   </optgroup>
                 </select>
+                {customModel && (
+                  <input
+                    type="text"
+                    value={settings.ai_model || ''}
+                    onChange={e => setSettings({...settings, ai_model: e.target.value})}
+                    className="w-full ios-input px-4 py-3 rounded-xl text-sm mt-2"
+                    placeholder="输入自定义模型名称，如 deepseek-v4-pro"
+                    autoFocus
+                  />
+                )}
               </div>
 
               <div className="space-y-3">
@@ -276,8 +348,10 @@ const Settings: React.FC = () => {
               <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-700">
                 <strong>常见 AI 服务:</strong>
                 <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>DeepSeek: https://api.deepseek.com/v1</li>
                   <li>阿里云通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1</li>
                   <li>OpenAI: https://api.openai.com/v1</li>
+                  <li>其他兼容接口: 填写对应的 base URL 即可</li>
                 </ul>
               </div>
             </div>

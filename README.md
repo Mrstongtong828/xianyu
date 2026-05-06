@@ -21,6 +21,35 @@
 
 ---
 
+## 🔧 安全加固与稳定性修复
+
+> 以下修复已于 2026-05-02 全部落地。
+
+### P0 — 安全修复
+
+| 编号 | 问题 | 修复内容 |
+|------|------|----------|
+| P0-1 | 认证后门 | 删除 `test_token` 绕过接口、移除前端游客试用按钮 |
+| P0-2 | 密码明文存储 | 新增 `utils/crypto.py`（Fernet 对称加密），`db_manager.py` 写入时加密、读取时解密，自动兼容历史明文数据 |
+|| P0-3 | 弱默认密码 | 首次启动自动生成 12 位随机密码并写入 `data/.admin_default_password`，启动日志醒目输出；管理员改密码后自动删除该文件；登录响应增加 `must_change_password` 字段提示前端 |
+|| P0-4 | Session 泄漏 | FastAPI lifespan 注册后台任务，每小时清理过期 session |
+|| P0-5 | SHA-256 密码哈希 | 改用 bcrypt；自动检测旧的 SHA-256 哈希，验证通过后静默升级为 bcrypt（无需用户干预） |
+|| P0-6 | 硬编码 API 密钥 | `API_SECRET_KEY` 改为 `os.getenv('API_SECRET_KEY', ...)` 读取，可通过环境变量配置 |
+
+### P1 — 性能与可靠性
+
+| 编号 | 问题 | 修复内容 |
+|------|------|----------|
+| P1-1 | SQL 日志噪声 | `sql_log_enabled` 默认值 `True` → `False` |
+| P1-2 | 健康检查阻塞 | `cpu_percent` 改用 `interval=0` 非阻塞调用 |
+| P1-3 | 请求日志膨胀 | 中间件过滤 `/static/`、`/favicon.ico` 等静态资源路径 |
+| P1-4 | AI 客户端重复创建 | 引入 `_TimedLRUCache`（容量 16、TTL 300s、线程安全），缓存 OpenAI 客户端实例 |
+|| P1-5 | db_manager 过大 | 按领域拆分为独立 DAO 文件（`dao/` 目录），当前仍使用合并版 `db_manager.py` |
+|| P1-6 | SQL 注入风险 | 新增 `_ALLOWED_TABLES` 白名单 + `_validate_table_name()` 校验函数，所有动态表名操作前强制校验 |
+|| P1-7 | CORS 硬编码 | 支持 `CORS_ORIGINS` 环境变量自定义允许的来源（逗号分隔），未设置时保持 localhost 默认值 |
+
+---
+
 ## ⭐ 功能总览
 
 ### 🤖 智能自动回复
@@ -149,12 +178,17 @@ cd frontend && npm run dev
 
 ### 🔐 默认账号
 
+首次启动时自动生成随机密码，密码会在启动日志中醒目打印：
 ```
-用户名: admin
-密码:   admin123
+==================================================
+首次创建 admin 用户，初始密码: xY7kRm2pQn9v
+请尽快登录并修改密码！
+==================================================
 ```
 
-> ⚠️ 首次登录后请立即修改默认密码！
+也可查看 `data/.admin_default_password` 文件。
+
+> ⚠️ 首次登录后请立即修改密码！修改后上述文件将被自动删除。
 
 ---
 
@@ -176,6 +210,7 @@ xianyu-super-butler/
 ├── Dockerfile / docker-compose.yml  # 容器化部署
 │
 ├── utils/                           # 工具模块
+│   ├── crypto.py                    # 敏感字段加密（Fernet 对称加密）
 │   ├── browser_pool.py              # 浏览器实例池（最多 3 实例复用）
 │   ├── xianyu_utils.py              # 闲鱼加密/签名/设备 ID 生成
 │   ├── xianyu_slider_stealth.py     # 滑块验证码隐身方案

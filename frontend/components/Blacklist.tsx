@@ -5,11 +5,22 @@ import { getBlacklist, addToBlacklist, removeFromBlacklist } from '../services/a
 import { Plus, Trash2, ShieldOff, X, Save, Loader2, User, MessageSquare, Clock } from 'lucide-react';
 
 const Blacklist: React.FC = () => {
+  const STORAGE_KEY = 'blacklist_form';
+  const savedForm = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } })();
+
   const [entries, setEntries] = useState<BlacklistEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ buyer_id: '', buyer_name: '', reason: '' });
+  const [form, setForm] = useState({
+    buyer_id: savedForm.buyer_id || '',
+    buyer_name: savedForm.buyer_name || '',
+    reason: savedForm.reason || ''
+  });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
+  }, [form]);
 
   useEffect(() => {
     loadEntries();
@@ -41,6 +52,8 @@ const Blacklist: React.FC = () => {
     try {
       await addToBlacklist(form.buyer_id, form.buyer_name, form.reason);
       setShowModal(false);
+      setForm({ buyer_id: '', buyer_name: '', reason: '' });
+      localStorage.removeItem(STORAGE_KEY);
       loadEntries();
       alert('添加成功！');
     } catch (e) {
