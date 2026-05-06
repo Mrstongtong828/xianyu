@@ -586,7 +586,7 @@ def _start_api_server():
 
     # 优先使用环境变量配置
     host = os.getenv('API_HOST', '0.0.0.0')  # 默认绑定所有接口
-    port = int(os.getenv('API_PORT', '8080'))  # 默认端口8080
+    port = int(os.getenv('API_PORT', '8000'))
 
     # 如果配置文件中有特定配置，则使用配置文件
     if 'host' in api_conf:
@@ -596,11 +596,11 @@ def _start_api_server():
 
     # 兼容旧的URL配置方式
     if 'url' in api_conf and 'host' not in api_conf and 'port' not in api_conf:
-        url = api_conf.get('url', 'http://0.0.0.0:8080/xianyu/reply')
+        url = api_conf.get('url', 'http://0.0.0.0:8000/xianyu/reply')
         parsed = urlparse(url)
         if parsed.hostname and parsed.hostname != 'localhost':
             host = parsed.hostname
-        port = parsed.port or 8080
+        port = parsed.port or 8000
 
     logger.info(f"启动Web服务器: http://{host}:{port}")
     # 在后台线程中创建独立事件循环并直接运行 server.serve()
@@ -613,13 +613,6 @@ def _start_api_server():
         loop.run_until_complete(server.serve())
     except Exception as e:
         logger.error(f"uvicorn服务器启动失败: {e}")
-        try:
-            # 确保线程内事件循环被正确关闭
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.stop()
-        except Exception:
-            pass
 
 
 
@@ -750,7 +743,7 @@ async def main():
 
     # 延迟打开浏览器，等待服务器就绪
     import webbrowser
-    port = int(os.getenv('API_PORT', AUTO_REPLY.get('api', {}).get('port', 8080)))
+    port = int(os.getenv('API_PORT', AUTO_REPLY.get('api', {}).get('port', 8000)))
     threading.Timer(3.0, lambda: webbrowser.open(f'http://127.0.0.1:{port}')).start()
 
     # 阻塞保持运行，直到收到关闭信号
@@ -760,16 +753,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    # 避免使用被monkey patch的asyncio.run()
-    # 使用原生的事件循环管理方式
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # 如果事件循环已经在运行，创建任务
-            asyncio.create_task(main())
-        else:
-            # 正常启动事件循环
-            loop.run_until_complete(main())
-    except RuntimeError:
-        # 如果没有事件循环，创建一个新的
-        asyncio.run(main()) 
+    asyncio.run(main())

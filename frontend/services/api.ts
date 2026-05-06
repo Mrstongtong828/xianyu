@@ -86,6 +86,19 @@ export const updateAccountLoginInfo = async (id: string, data: {
   return put(`/cookies/${id}/login-info`, data);
 };
 
+export const startPasswordLogin = async (data: {
+  account_id: string;
+  account: string;
+  password: string;
+  show_browser?: boolean;
+}): Promise<{ success: boolean; session_id?: string; message?: string }> => {
+  return post('/password-login', data);
+};
+
+export const checkPasswordLoginStatus = async (sessionId: string): Promise<any> => {
+  return get(`/password-login/check/${sessionId}`);
+};
+
 export const getAllAISettings = async (): Promise<Record<string, AIReplySettings>> => {
   return get('/ai-reply-settings');
 };

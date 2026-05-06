@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getSystemSettings, updateSystemSettings } from '../services/api';
+import { getSystemSettings, updateSystemSettings, getAllAISettings, updateAccountAISettings } from '../services/api';
 import { SystemSettings } from '../types';
 import {
   Bot, Save, Lock, Sparkles, Mail, Settings as SettingsIcon,
@@ -29,6 +29,18 @@ const Settings: React.FC = () => {
       setSaving(true);
       try {
         await updateSystemSettings(settings);
+        // 同步全局模型/Key/URL到所有账号的AI设置
+        if (settings.ai_model || settings.ai_api_key || settings.ai_base_url) {
+          const allAI = await getAllAISettings();
+          await Promise.all(Object.entries(allAI).map(([cookieId, s]) =>
+            updateAccountAISettings(cookieId, {
+              ...s,
+              ...(settings.ai_model ? { model_name: settings.ai_model } : {}),
+              ...(settings.ai_api_key ? { api_key: settings.ai_api_key } : {}),
+              ...(settings.ai_base_url ? { base_url: settings.ai_base_url } : {}),
+            })
+          ));
+        }
         alert('系统配置已保存');
       } catch (e) {
         alert('保存失败：' + (e as Error).message);
@@ -230,10 +242,24 @@ const Settings: React.FC = () => {
                   onChange={e => setSettings({...settings, ai_model: e.target.value})}
                   className="w-full ios-input px-4 py-3 rounded-xl"
                 >
-                  <option value="qwen-plus">通义千问 Plus</option>
-                  <option value="qwen-turbo">通义千问 Turbo</option>
-                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                  <option value="gpt-4">GPT-4</option>
+                  <optgroup label="通义千问">
+                    <option value="qwen-plus">通义千问 Plus</option>
+                    <option value="qwen-turbo">通义千问 Turbo</option>
+                    <option value="qwen-max">通义千问 Max</option>
+                  </optgroup>
+                  <optgroup label="DeepSeek">
+                    <option value="deepseek-chat">DeepSeek Chat (V3)</option>
+                    <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
+                  </optgroup>
+                  <optgroup label="OpenAI">
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                  </optgroup>
+                  <optgroup label="Google">
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                  </optgroup>
                 </select>
               </div>
 

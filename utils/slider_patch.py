@@ -144,16 +144,10 @@ def send_notification(user_id: str, title: str, message: str, notification_type:
         
         # 运行异步任务
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # 如果事件循环正在运行，创建任务
-                asyncio.create_task(send_notifications_async())
-                return True  # 异步发送，假设成功
-            else:
-                # 如果没有运行的事件循环，直接运行
-                return loop.run_until_complete(send_notifications_async())
+            loop = asyncio.get_running_loop()
+            loop.create_task(send_notifications_async())
+            return True
         except RuntimeError:
-            # 如果没有事件循环，创建新的
             return asyncio.run(send_notifications_async())
     
     except Exception as e:

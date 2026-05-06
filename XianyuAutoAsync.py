@@ -177,31 +177,88 @@ logger.add(
 
 class XianyuLive:
     # 类级别的锁字典，为每个order_id维护一个锁（用于自动发货）
-    _order_locks = defaultdict(lambda: asyncio.Lock())
+    _order_locks: dict = {}
     # 记录锁的最后使用时间，用于清理
     _lock_usage_times = {}
     # 记录锁的持有状态和释放时间 {lock_key: {'locked': bool, 'release_time': float, 'task': asyncio.Task}}
     _lock_hold_info = {}
 
     # 独立的锁字典，用于订单详情获取（不使用延迟锁机制）
-    _order_detail_locks = defaultdict(lambda: asyncio.Lock())
+    _order_detail_locks: dict = {}
+
+    @classmethod
+    def _get_item_detail_cache_lock(cls) -> asyncio.Lock:
+        if cls._item_detail_cache_lock is None:
+            cls._item_detail_cache_lock = asyncio.Lock()
+        return cls._item_detail_cache_lock
+
+    @property
+    def notification_lock(self) -> asyncio.Lock:
+        if self._notification_lock is None:
+            self._notification_lock = asyncio.Lock()
+        return self._notification_lock
+        if key not in cls._order_locks:
+            cls._order_locks[key] = asyncio.Lock()
+        return cls._order_locks[key]
+
+    @classmethod
+    def _get_order_detail_lock(cls, key: str) -> asyncio.Lock:
+        if key not in cls._order_detail_locks:
+            cls._order_detail_locks[key] = asyncio.Lock()
+        return cls._order_detail_locks[key]
     # 记录订单详情锁的使用时间
     _order_detail_lock_times = {}
 
     # 商品详情缓存（24小时有效）
-    _item_detail_cache = {}  # {item_id: {'detail': str, 'timestamp': float, 'access_time': float}}
-    _item_detail_cache_lock = asyncio.Lock()
-    _item_detail_cache_max_size = 1000  # 最大缓存1000个商品
+    _item_detail_cache = {}
+    _item_detail_cache_lock: asyncio.Lock = None
+    _item_detail_cache_max_size = 1000
     _item_detail_cache_ttl = 24 * 60 * 60  # 24小时TTL
 
     # 类级别的实例管理字典，用于API调用
-    _instances = {}  # {cookie_id: XianyuLive实例}
-    _instances_lock = asyncio.Lock()
+    _instances = {}
+    _instances_lock: asyncio.Lock = None
+
+    @classmethod
+    def _get_instances_lock(cls) -> asyncio.Lock:
+        if cls._instances_lock is None:
+            cls._instances_lock = asyncio.Lock()
+        return cls._instances_lock
     
     # 类级别的密码登录时间记录，用于防止重复登录
     _last_password_login_time = {}  # {cookie_id: timestamp}
     _password_login_cooldown = 60  # 密码登录冷却时间：60秒
     
+    @property
+    def cookie_refresh_lock(self) -> asyncio.Lock:
+        if self._cookie_refresh_lock is None:
+            self._cookie_refresh_lock = asyncio.Lock()
+        return self._cookie_refresh_lock
+
+    @property
+    def item_sync_lock(self) -> asyncio.Lock:
+        if self._item_sync_lock is None:
+            self._item_sync_lock = asyncio.Lock()
+        return self._item_sync_lock
+
+    @property
+    def message_debounce_lock(self) -> asyncio.Lock:
+        if self._message_debounce_lock is None:
+            self._message_debounce_lock = asyncio.Lock()
+        return self._message_debounce_lock
+
+    @property
+    def processed_message_ids_lock(self) -> asyncio.Lock:
+        if self._processed_message_ids_lock is None:
+            self._processed_message_ids_lock = asyncio.Lock()
+        return self._processed_message_ids_lock
+
+    @property
+    def message_semaphore(self) -> asyncio.Semaphore:
+        if self._message_semaphore is None:
+            self._message_semaphore = asyncio.Semaphore(100)
+        return self._message_semaphore
+
     def _safe_str(self, e):
         """安全地将异常转换为字符串"""
         try:
@@ -720,7 +777,7 @@ class XianyuLive:
         self.last_notification_time = {}  # 记录每种通知类型的最后发送时间
         self.notification_cooldown = 300  # 5分钟内不重复发送相同类型的通知
         self.token_refresh_notification_cooldown = 18000  # Token刷新异常通知冷却时间：3小时
-        self.notification_lock = asyncio.Lock()  # 通知防重复机制的异步锁
+        self._notification_lock = None  # 延迟初始化，避免在非async上下文创建Lock
 
         # 自动发货防重复机制
         self.last_delivery_time = {}  # 记录每个商品的最后发货时间
@@ -749,8 +806,8 @@ class XianyuLive:
         self.item_schedule_task = None
 
         self.last_cookie_refresh_time = 0
-        self.cookie_refresh_lock = asyncio.Lock()  # 使用Lock防止重复执行Cookie刷新
-        self.cookie_refresh_enabled = True  # 是否启用Cookie刷新功能
+        self._cookie_refresh_lock = None
+        self.cookie_refresh_enabled = True
 
         # 商品同步定时任务
         self.item_sync_task = None
@@ -758,7 +815,7 @@ class XianyuLive:
         self.item_sync_interval = cfg.get('ITEM_SYNC', {}).get('interval', 3600)  # 默认1小时
         self.item_sync_max_pages = cfg.get('ITEM_SYNC', {}).get('max_pages', 5)
         self.last_item_sync_time = 0
-        self.item_sync_lock = asyncio.Lock()  # 使用Lock防止重复执行商品同步
+        self._item_sync_lock = None
 
         # 扫码登录Cookie刷新标志
         self.last_qr_cookie_refresh_time = 0  # 记录上次扫码登录Cookie刷新时间
@@ -788,18 +845,18 @@ class XianyuLive:
         self.background_tasks = set()  # 追踪所有后台任务
         
         # 消息处理并发控制（防止内存泄漏）
-        self.message_semaphore = asyncio.Semaphore(100)  # 最多100个并发消息处理任务
+        self._message_semaphore = None
         self.active_message_tasks = 0  # 当前活跃的消息处理任务数
 
         # 消息防抖管理器：用于处理用户连续发送消息的情况
         # {chat_id: {'task': asyncio.Task, 'last_message': dict, 'timer': float}}
         self.message_debounce_tasks = {}  # 存储每个chat_id的防抖任务
         self.message_debounce_delay = 1  # 防抖延迟时间（秒）：用户停止发送消息1秒后才回复
-        self.message_debounce_lock = asyncio.Lock()  # 防抖任务管理的锁
+        self._message_debounce_lock = None
         
         # 消息去重机制：防止同一条消息被处理多次
         self.processed_message_ids = {}  # 存储已处理的消息ID和时间戳 {message_id: timestamp}
-        self.processed_message_ids_lock = asyncio.Lock()  # 消息ID去重的锁
+        self._processed_message_ids_lock = None
         self.processed_message_ids_max_size = 10000  # 最大保存10000个消息ID，防止内存泄漏
         self.message_expire_time = 3600  # 消息过期时间（秒），默认1小时后可以重复回复
 
@@ -1251,7 +1308,7 @@ class XianyuLive:
                 return
 
             # 获取或创建该订单的锁
-            order_lock = self._order_locks[lock_key]
+            order_lock = self._get_order_lock(lock_key)
 
             # 更新锁的使用时间
             self._lock_usage_times[lock_key] = time.time()
@@ -1865,7 +1922,7 @@ class XianyuLive:
                 import asyncio
                 import concurrent.futures
 
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     # 执行滑块验证
                     success, cookies = await loop.run_in_executor(
@@ -2633,7 +2690,7 @@ class XianyuLive:
                 return ""
 
             # 1. 首先检查缓存（24小时有效）
-            async with self._item_detail_cache_lock:
+            async with self._get_item_detail_cache_lock():
                 if item_id in self._item_detail_cache:
                     cache_data = self._item_detail_cache[item_id]
                     cache_time = cache_data['timestamp']
@@ -2673,7 +2730,7 @@ class XianyuLive:
             item_id: 商品ID
             detail: 商品详情
         """
-        async with self._item_detail_cache_lock:
+        async with self._get_item_detail_cache_lock():
             current_time = time.time()
             
             # 检查缓存大小，如果超过限制则清理
@@ -2701,7 +2758,7 @@ class XianyuLive:
     async def _cleanup_item_cache(cls):
         """清理过期的商品详情缓存"""
         try:
-            async with cls._item_detail_cache_lock:
+            async with cls._get_item_detail_cache_lock():
                 # 在持有锁时也要能响应取消信号
                 await asyncio.sleep(0)
                 
@@ -4788,7 +4845,7 @@ class XianyuLive:
     async def fetch_order_detail_info(self, order_id: str, item_id: str = None, buyer_id: str = None, debug_headless: bool = None):
         """获取订单详情信息（使用独立的锁机制，不受延迟锁影响）"""
         # 使用独立的订单详情锁，不与自动发货锁冲突
-        order_detail_lock = self._order_detail_locks[order_id]
+        order_detail_lock = self._get_order_detail_lock(order_id)
 
         # 记录订单详情锁的使用时间
         self._order_detail_lock_times[order_id] = time.time()
@@ -7956,7 +8013,7 @@ class XianyuLive:
                             pass
 
                         # 检查是否已经在获取该订单详情
-                        order_detail_lock = self._order_detail_locks[order_id]
+                        order_detail_lock = self._get_order_detail_lock(order_id)
                         if order_detail_lock.locked():
                             logger.info(f'[{msg_time}] 【{self.cookie_id}】🔒 订单 {order_id} 详情正在被其他任务获取，跳过重复请求')
                         else:

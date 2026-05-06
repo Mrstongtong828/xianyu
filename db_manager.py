@@ -260,6 +260,14 @@ class DBManager:
                 self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_address TEXT DEFAULT ''")
                 logger.info("orders 表收货人信息列添加完成")
 
+            # 检查并添加 receiver_city 列
+            try:
+                self._execute_sql(cursor, "SELECT receiver_city FROM orders LIMIT 1")
+            except sqlite3.OperationalError:
+                logger.info("正在为 orders 表添加 receiver_city 列...")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_city TEXT DEFAULT ''")
+                logger.info("orders 表 receiver_city 列添加完成")
+
             # 检查并添加 version 列（用于乐观锁）
             try:
                 self._execute_sql(cursor, "SELECT version FROM orders LIMIT 1")
@@ -935,6 +943,13 @@ class DBManager:
                     # receiver_address字段不存在，需要添加
                     self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_address TEXT")
                     logger.info("为orders表添加receiver_address字段")
+
+                # 检查orders表是否有receiver_city字段
+                try:
+                    self._execute_sql(cursor, "SELECT receiver_city FROM orders LIMIT 1")
+                except sqlite3.OperationalError:
+                    self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_city TEXT DEFAULT ''")
+                    logger.info("为orders表添加receiver_city字段")
 
                 # 检查orders表是否有system_shipped字段（系统是否已发货）
                 try:

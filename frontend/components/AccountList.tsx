@@ -16,7 +16,9 @@ import {
   getAllAISettings,
   getAccountAISettings,
   getEvaluationConfig,
-  updateEvaluationConfig
+  updateEvaluationConfig,
+  startPasswordLogin,
+  checkPasswordLoginStatus
 } from '../services/api';
 import {
   Plus, Power, Edit2, Trash2, QrCode, X, Check, Loader2,
@@ -46,6 +48,12 @@ const AccountList: React.FC = () => {
     show_browser: false,
     showLoginPassword: false,
   });
+
+  // 密码登录状态
+  const [pwLoginStatus, setPwLoginStatus] = useState<string>('');
+  const [pwLoginMessage, setPwLoginMessage] = useState<string>('');
+  const [pwLoginVerifyUrl, setPwLoginVerifyUrl] = useState<string>('');
+  const [pwLoginLoading, setPwLoginLoading] = useState(false);
 
   // AI设置表单状态
   const [aiSettings, setAiSettings] = useState<AIReplySettings>({
@@ -124,6 +132,10 @@ const AccountList: React.FC = () => {
       show_browser: account.show_browser || false,
       showLoginPassword: false,
     });
+    setPwLoginStatus('');
+    setPwLoginMessage('');
+    setPwLoginVerifyUrl('');
+    setPwLoginLoading(false);
     setActiveModal('edit');
   };
 
@@ -134,6 +146,9 @@ const AccountList: React.FC = () => {
       const settings = await getAccountAISettings(account.id);
       setAiSettings({
         ai_enabled: settings.ai_enabled ?? false,
+        model_name: settings.model_name ?? 'qwen-plus',
+        api_key: settings.api_key ?? '',
+        base_url: settings.base_url ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         max_discount_percent: settings.max_discount_percent ?? 10,
         max_discount_amount: settings.max_discount_amount ?? 100,
         max_bargain_rounds: settings.max_bargain_rounds ?? 3,
@@ -145,6 +160,63 @@ const AccountList: React.FC = () => {
       setSaving(false);
     }
     setActiveModal('ai-settings');
+  };
+
+  const handlePasswordLogin = async () => {
+    if (!editingAccount) return;
+    if (!editForm.username || !editForm.login_password) {
+      alert('请先填写用户名和登录密码');
+      return;
+    }
+    setPwLoginLoading(true);
+    setPwLoginStatus('processing');
+    setPwLoginMessage('正在登录...');
+    setPwLoginVerifyUrl('');
+    try {
+      const res = await startPasswordLogin({
+        account_id: editingAccount.id,
+        account: editForm.username,
+        password: editForm.login_password,
+        show_browser: editForm.show_browser,
+      });
+      if (!res.success || !res.session_id) {
+        setPwLoginStatus('failed');
+        setPwLoginMessage(res.message || '启动登录失败');
+        setPwLoginLoading(false);
+        return;
+      }
+      const sessionId = res.session_id;
+      const interval = setInterval(async () => {
+        try {
+          const status = await checkPasswordLoginStatus(sessionId);
+          if (status.status === 'success') {
+            clearInterval(interval);
+            setPwLoginStatus('success');
+            setPwLoginMessage('登录成功，Cookie 已更新');
+            setPwLoginLoading(false);
+            loadAccounts();
+          } else if (status.status === 'verification_required') {
+            setPwLoginStatus('verification');
+            setPwLoginMessage('需要人脸验证，请点击链接完成验证');
+            if (status.verification_url) setPwLoginVerifyUrl(status.verification_url);
+          } else if (status.status === 'failed') {
+            clearInterval(interval);
+            setPwLoginStatus('failed');
+            setPwLoginMessage(status.error || '登录失败');
+            setPwLoginLoading(false);
+          }
+        } catch {
+          clearInterval(interval);
+          setPwLoginStatus('failed');
+          setPwLoginMessage('查询状态失败');
+          setPwLoginLoading(false);
+        }
+      }, 2000);
+    } catch {
+      setPwLoginStatus('failed');
+      setPwLoginMessage('请求失败');
+      setPwLoginLoading(false);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -703,10 +775,33 @@ const AccountList: React.FC = () => {
                       />
                     </button>
                   </div>
+                  {/* 立即登录按钮 */}
+                  <button
+                    type="button"
+                    onClick={handlePasswordLogin}
+                    disabled={pwLoginLoading}
+                    className="w-full px-4 py-3 rounded-xl font-bold bg-amber-400 hover:bg-amber-500 text-gray-900 flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {pwLoginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+                    立即登录并更新 Cookie
+                  </button>
+                  {pwLoginStatus && (
+                    <div className={`text-sm px-3 py-2 rounded-lg ${
+                      pwLoginStatus === 'success' ? 'bg-green-50 text-green-700' :
+                      pwLoginStatus === 'failed' ? 'bg-red-50 text-red-700' :
+                      'bg-blue-50 text-blue-700'
+                    }`}>
+                      {pwLoginMessage}
+                      {pwLoginVerifyUrl && (
+                        <a href={pwLoginVerifyUrl} target="_blank" rel="noreferrer" className="block mt-1 underline font-bold">
+                          点击此处完成人脸验证
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-
             <div className="modal-footer">
               <div className="flex gap-3 w-full">
                 <button
@@ -774,6 +869,63 @@ const AccountList: React.FC = () => {
                     }`}
                   />
                 </button>
+              </div>
+
+              {/* 模型配置 */}
+              <div className="border-t border-gray-200 pt-6 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">模型配置</h3>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">模型</label>
+                  <select
+                    value={aiSettings.model_name || 'qwen-plus'}
+                    onChange={e => setAiSettings({ ...aiSettings, model_name: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                  >
+                    <optgroup label="通义千问">
+                      <option value="qwen-plus">通义千问 Plus</option>
+                      <option value="qwen-turbo">通义千问 Turbo</option>
+                      <option value="qwen-max">通义千问 Max</option>
+                    </optgroup>
+                    <optgroup label="DeepSeek">
+                      <option value="deepseek-chat">DeepSeek Chat (V3)</option>
+                      <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
+                    </optgroup>
+                    <optgroup label="OpenAI">
+                      <option value="gpt-4o">GPT-4o</option>
+                      <option value="gpt-4o-mini">GPT-4o Mini</option>
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    </optgroup>
+                    <optgroup label="Google">
+                      <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                      <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">API Key</label>
+                  <input
+                    type="password"
+                    value={aiSettings.api_key || ''}
+                    onChange={e => setAiSettings({ ...aiSettings, api_key: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                    placeholder="sk-..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">API Base URL</label>
+                  <input
+                    type="text"
+                    value={aiSettings.base_url || ''}
+                    onChange={e => setAiSettings({ ...aiSettings, base_url: e.target.value })}
+                    className="w-full ios-input px-4 py-3 rounded-xl"
+                    placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    千问: dashscope.aliyuncs.com/compatible-mode/v1 &nbsp;|&nbsp;
+                    DeepSeek: api.deepseek.com/v1 &nbsp;|&nbsp;
+                    OpenAI: api.openai.com/v1
+                  </p>
+                </div>
               </div>
 
               {/* 砍价策略 */}
