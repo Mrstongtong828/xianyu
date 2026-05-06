@@ -70,6 +70,9 @@ const Dashboard: React.FC = () => {
   // 每日配额
   const [accountQuotas, setAccountQuotas] = useState<Record<string, { auto_reply_count: number; auto_delivery_count: number; config: { daily_reply_limit: number; daily_delivery_limit: number } }>>({});
   const [accounts, setAccounts] = useState<{ id: string; remark: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   // 颜色配置
   const COLORS = ['#FFE815', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6'];
@@ -254,33 +257,43 @@ const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    getAdminStats().then(setStats).catch(console.error);
-    loadAnalytics(timeRange);
-    // 获取商品列表
+    setLoading(true);
+    setError(null);
+    const { startDate, endDate } = getDatesForRange(timeRange);
+
+    Promise.all([
+      getAdminStats().then(setStats).catch(() => null),
+      getOrderAnalytics({ start_date: startDate, end_date: endDate }).then(setAnalytics).catch(() => null),
+      getValidOrders({ start_date: startDate, end_date: endDate })
+        .then(setValidOrders)
+        .catch(() => null)
+        .finally(() => setOrdersLoading(false)),
+    ])
+      .then(() => setLoading(false))
+      .catch(() => {
+        setError('数据加载失败');
+        setLoading(false);
+      });
+
+    // Load previous period independently (not blocking)
+    const now = new Date();
+    const previousParams = getPreviousPeriodParams(timeRange, now);
+    if (previousParams) {
+      getOrderAnalytics(previousParams).then(setPreviousAnalytics).catch(() => null);
+    }
+  }, [timeRange, retryKey]);
+
+  // Items loaded once on mount (cached, not refetched on timeRange change)
+  useEffect(() => {
     getItems().then(items => {
       setItems(items);
-      // 建立 item_id 到 item_title 的映射
       const nameMap: Record<string, string> = {};
       items.forEach(item => {
         nameMap[item.item_id] = item.item_title || item.item_id;
       });
       setItemNames(nameMap);
-    }).catch(console.error);
-  }, [timeRange]);
-
-  // 加载订单列表
-  useEffect(() => {
-    const { startDate, endDate } = getDatesForRange(timeRange);
-
-    // 获取参与统计的订单列表
-    setOrdersLoading(true);
-    getValidOrders({ start_date: startDate, end_date: endDate })
-      .then(orders => {
-        setValidOrders(orders);
-      })
-      .catch(console.error)
-      .finally(() => setOrdersLoading(false));
-  }, [timeRange]);
+    }).catch(() => null);
+  }, []);
 
   useEffect(() => {
     getAccountDetails().then(accs => {
@@ -296,25 +309,95 @@ const Dashboard: React.FC = () => {
     }).catch(console.error);
   }, []);
 
-  // 辅助函数：获取时间范围的日期
+  // 辅助函数：获取时间范围的日期（返回YYYY-MM-DD格式，用于API调用）
   const getDatesForRange = (range: TimeRange) => {
     const now = new Date();
-    const endDate = now.toISOString().split('T')[0];
-    let startDate = endDate;
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
 
-    if (range === '7days') {
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      startDate = sevenDaysAgo.toISOString().split('T')[0];
-    } else if (range === '30days') {
-      const thirtyDaysAgo = new Date(now);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      startDate = thirtyDaysAgo.toISOString().split('T')[0];
+    switch (range) {
+      case 'today':
+        return { startDate: todayStr, endDate: todayStr };
+      case 'yesterday': {
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yYear = yesterday.getFullYear();
+        const yMonth = String(yesterday.getMonth() + 1).padStart(2, '0');
+        const yDay = String(yesterday.getDate()).padStart(2, '0');
+        const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
+        return { startDate: yesterdayStr, endDate: yesterdayStr };
+      }
+      case '3days': {
+        const threeDaysAgo = new Date(now);
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        const tdYear = threeDaysAgo.getFullYear();
+        const tdMonth = String(threeDaysAgo.getMonth() + 1).padStart(2, '0');
+        const tdDay = String(threeDaysAgo.getDate()).padStart(2, '0');
+        return { startDate: `${tdYear}-${tdMonth}-${tdDay}`, endDate: todayStr };
+      }
+      case '7days': {
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const sdYear = sevenDaysAgo.getFullYear();
+        const sdMonth = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+        const sdDay = String(sevenDaysAgo.getDate()).padStart(2, '0');
+        return { startDate: `${sdYear}-${sdMonth}-${sdDay}`, endDate: todayStr };
+      }
+      case '30days': {
+        const thirtyDaysAgo = new Date(now);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const tdYear2 = thirtyDaysAgo.getFullYear();
+        const tdMonth2 = String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0');
+        const tdDay2 = String(thirtyDaysAgo.getDate()).padStart(2, '0');
+        return { startDate: `${tdYear2}-${tdMonth2}-${tdDay2}`, endDate: todayStr };
+      }
+      case 'custom':
+        if (customStartDate && customEndDate) {
+          return { startDate: customStartDate, endDate: customEndDate };
+        }
+        // fall through to default for custom without dates
+      default: {
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const sdYear = sevenDaysAgo.getFullYear();
+        const sdMonth = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+        const sdDay = String(sevenDaysAgo.getDate()).padStart(2, '0');
+        return { startDate: `${sdYear}-${sdMonth}-${sdDay}`, endDate: todayStr };
+      }
     }
-    // 其他范围类似处理...
-
-    return { startDate, endDate };
   };
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <AlertCircle className="w-12 h-12 text-red-400" />
+        <p className="text-gray-500 dark:text-gray-400">数据加载失败</p>
+        <button onClick={() => { setError(null); setLoading(true); setRetryKey(k => k + 1); }}
+          className="px-6 py-2 bg-[#FFE815] text-black rounded-xl font-bold">
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  if (loading && !stats) {
+    return (
+      <div className="p-6 space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="ios-card p-6 rounded-[2rem] animate-pulse">
+              <div className="h-12 w-12 bg-gray-200 dark:bg-gray-700 rounded-2xl mb-4" />
+              <div className="h-8 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+              <div className="h-4 w-32 bg-gray-100 dark:bg-gray-800 rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="h-80 bg-gray-100 dark:bg-gray-800 rounded-[2rem] animate-pulse" />
+      </div>
+    );
+  }
 
   if (!stats || !analytics) return <div className="p-8 flex justify-center text-gray-400"><Activity className="w-8 h-8 animate-spin text-[#FFE815]" /></div>;
 

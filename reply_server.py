@@ -42,6 +42,8 @@ async def lifespan(app: FastAPI):
                 logger.error(f"清理过期session失败: {e}")
     _cleanup_task = asyncio.create_task(_periodic_cleanup())
     logger.info("Session过期清理后台任务已启动")
+    from wechat_auth import init_wechat_auth
+    init_wechat_auth()
     yield
     if _cleanup_task:
         _cleanup_task.cancel()
@@ -69,7 +71,11 @@ _cors_origins_env = os.getenv('CORS_ORIGINS', '')
 if _cors_origins_env:
     cors_origins = [o.strip() for o in _cors_origins_env.split(',') if o.strip()]
 else:
+    api_host = os.getenv('API_HOST', '0.0.0.0')
+    api_port = os.getenv('API_PORT', '8000')
     cors_origins = [
+        f"http://localhost:{api_port}",
+        f"http://127.0.0.1:{api_port}",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",
@@ -98,10 +104,19 @@ async def log_requests(request, call_next):
         return await call_next(request)
     start_time = time.time()
     logger.info(f"🌐 API请求: {request.method} {path}")
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    logger.info(f"✅ API响应: {request.method} {path} - {response.status_code} ({process_time:.3f}s)")
-    return response
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        logger.info(f"✅ API响应: {request.method} {path} - {response.status_code} ({process_time:.3f}s)")
+        return response
+    except Exception as e:
+        process_time = time.time() - start_time
+        logger.error(f"❌ API异常: {request.method} {path} - {type(e).__name__}: {e} ({process_time:.3f}s)")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "内部服务器错误", "error": str(e) if os.getenv('DEBUG') else "服务器内部错误"}
+        )
 
 
 # ============ 静态文件 ============

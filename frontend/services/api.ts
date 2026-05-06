@@ -24,6 +24,36 @@ export const changePassword = async (currentPassword: string, newPassword: strin
   return post('/change-password', { current_password: currentPassword, new_password: newPassword });
 };
 
+// WeChat Login
+export const getWechatQRCode = async (): Promise<{ success: boolean; state?: string; qrcode?: string; message?: string }> => {
+  return get('/wechat/qrcode');
+};
+
+export const checkWechatStatus = async (state: string): Promise<{ success: boolean; status: string; token?: string; user_id?: number; username?: string; message?: string }> => {
+  return get(`/wechat/status/${state}`);
+};
+
+export const bindWechat = async (data: { openid: string; unionid?: string; nickname?: string; avatar?: string }): Promise<{ success: boolean; message: string }> => {
+  return post('/wechat/bind', data);
+};
+
+export const unbindWechat = async (): Promise<{ success: boolean; message: string }> => {
+  return post('/wechat/unbind');
+};
+
+export const getWechatInfo = async (): Promise<{ success: boolean; bound: boolean; nickname?: string; avatar_url?: string }> => {
+  return get('/wechat/info');
+};
+
+// Registration
+export const register = async (data: { username: string; email: string; password: string; verification_code: string }): Promise<{ success: boolean; message: string }> => {
+  return post('/register', data);
+};
+
+export const sendVerificationCode = async (data: { email: string; type: string }): Promise<{ success: boolean; message: string }> => {
+  return post('/send-verification-code', data);
+};
+
 // Accounts
 export const getAccountDetails = async (): Promise<AccountDetail[]> => {
   const data = await get<any[]>('/cookies/details');

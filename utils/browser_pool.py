@@ -5,6 +5,7 @@
 import asyncio
 import time
 import os
+import sys
 from typing import Dict, Optional, Tuple
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page, Playwright
 from loguru import logger
@@ -57,12 +58,16 @@ class BrowserPool:
         Args:
             cookie_id: Cookie ID
             cookie_string: Cookie字符串
-            headless: 是否无头模式
+            headless: 是否无头模式（会被 XY_FORCE_HEADLESS 环境变量覆盖）
             create_new_page: 是否创建新页面（默认True，避免并发冲突）
 
         Returns:
             (browser, context, page) 元组，失败返回None
         """
+        # 全局强制无头模式
+        if os.getenv('XY_FORCE_HEADLESS', '0') == '1':
+            headless = True
+            logger.debug(f"强制无头模式: {cookie_id}")
         async with self._locks[cookie_id]:
             # 检查是否已存在该cookie_id的浏览器实例
             async with self._pool_lock:
@@ -156,8 +161,22 @@ class BrowserPool:
                 '--hide-scrollbars',
                 '--mute-audio',
                 '--no-default-browser-check',
-                '--no-pings'
+                '--no-pings',
+                '--max_old_space_size=512',
+                '--js-flags=--max-old-space-size=512',
             ]
+
+            # Windows环境额外参数（降低资源占用）
+            if sys.platform == 'win32':
+                browser_args.extend([
+                    '--disable-features=CalculateNativeWinOcclusion',
+                    '--disable-renderer-backgrounding',
+                    '--memory-pressure-off',
+                ])
+                try:
+                    os.environ['PLAYWRIGHT_CHROMIUM_ARGS'] = ' '.join(browser_args)
+                except Exception:
+                    pass
 
             # Docker环境额外参数
             if os.getenv('DOCKER_ENV'):
@@ -176,7 +195,6 @@ class BrowserPool:
                     '--password-store=basic',
                     '--use-mock-keychain',
                     '--memory-pressure-off',
-                    '--max_old_space_size=512',
                     '--disable-component-extensions-with-background-pages',
                     '--disable-features=TranslateUI,BlinkGenPropertyTrees',
                     '--disable-logging',
@@ -371,23 +389,52 @@ class BrowserPool:
 
 
 # 全局浏览器池实例（单例模式）
+import threading as _threading
+
 _global_browser_pool: Optional[BrowserPool] = None
+_browser_pool_lock = _threading.Lock()
+_browser_pool_cleanup_task: Optional[asyncio.Task] = None
 
 
-def get_browser_pool(max_size: int = 3, idle_timeout: int = 300) -> BrowserPool:
+def get_browser_pool(max_size: int = None, idle_timeout: int = 300) -> BrowserPool:
     """
-    获取全局浏览器池实例（单例模式）
-
-    Args:
-        max_size: 最大浏览器实例数
-        idle_timeout: 闲置超时时间（秒）
-
-    Returns:
-        BrowserPool实例
+    获取全局浏览器池实例（线程安全单例模式）
     """
-    global _global_browser_pool
+    global _global_browser_pool, _browser_pool_cleanup_task
 
-    if _global_browser_pool is None:
-        _global_browser_pool = BrowserPool(max_size=max_size, idle_timeout=idle_timeout)
+    if max_size is None:
+        import os
+        max_size = int(os.getenv('XY_POOL_SIZE', '3'))
+
+    with _browser_pool_lock:
+        if _global_browser_pool is None:
+            _global_browser_pool = BrowserPool(max_size=max_size, idle_timeout=idle_timeout)
+            _start_idle_cleanup()
+        else:
+            if max_size < _global_browser_pool.max_size:
+                _global_browser_pool.max_size = max_size
+                logger.info(f"浏览器池最大实例数已更新为 {max_size}")
 
     return _global_browser_pool
+
+
+def _start_idle_cleanup():
+    """启动定期清理闲置浏览器的后台任务"""
+    global _browser_pool_cleanup_task
+
+    async def _cleanup_loop():
+        while True:
+            await asyncio.sleep(120)  # 每2分钟检查一次
+            if _global_browser_pool:
+                try:
+                    await _global_browser_pool.cleanup_idle_browsers()
+                except Exception as e:
+                    logger.debug(f"闲置浏览器清理失败: {e}")
+
+    try:
+        loop = asyncio.get_running_loop()
+        _browser_pool_cleanup_task = loop.create_task(_cleanup_loop())
+        logger.info("浏览器池闲置清理任务已启动")
+    except RuntimeError:
+        # 没有运行中的事件循环，跳过
+        pass

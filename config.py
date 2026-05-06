@@ -117,7 +117,13 @@ AUTO_REPLY = config.get('AUTO_REPLY', {
     }
 })
 MANUAL_MODE = config.get('MANUAL_MODE', {})
-LOG_CONFIG = config.get('LOG_CONFIG', {}) 
+LOG_CONFIG = config.get('LOG_CONFIG', {})
+WECHAT_CONFIG = config.get('WECHAT', {
+    'app_id': '',
+    'app_secret': '',
+    'redirect_uri': '',
+    'enabled': False
+})
 _cookies_raw = config.get('COOKIES', [])
 if isinstance(_cookies_raw, list):
     COOKIES_LIST = _cookies_raw

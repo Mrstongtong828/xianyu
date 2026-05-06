@@ -58,46 +58,88 @@ class FileLogCollector:
         """设置loguru输出到文件"""
         try:
             from loguru import logger
-            
-            # 添加文件输出
+
             logger.add(
                 self.log_file,
                 format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} - {message}",
-                level="INFO",  # 从DEBUG改为INFO，减少日志量
+                level="INFO",
                 rotation="10 MB",
-                retention="3 days",  # 从7天改为3天，减少磁盘占用
-                enqueue=False,  # 改为False，避免队列延迟
-                buffering=1     # 行缓冲，立即写入
+                retention="3 days",
+                enqueue=False,
+                buffering=1
             )
-            
+
             logger.info("文件日志收集器已启动")
-            
         except ImportError:
             pass
+
+    def _recover_log_file(self):
+        """当日志文件丢失时尝试恢复"""
+        self.last_position = 0
+        if os.path.exists(self.log_file):
+            try:
+                self.last_position = os.path.getsize(self.log_file)
+                logger.debug(f"日志文件恢复，当前位置: {self.last_position}")
+            except Exception:
+                pass
+        else:
+            self.setup_loguru_file_output()
+            logger.warning("日志文件丢失，已重新创建")
     
     def monitor_file(self):
-        """监控日志文件变化"""
+        """监控日志文件变化（支持文件轮转恢复）"""
+        stale_counter = 0
+        max_stale_checks = 10  # 连续5秒无变化后重新检测文件
+
         while True:
             try:
-                if os.path.exists(self.log_file):
-                    # 获取文件大小
-                    file_size = os.path.getsize(self.log_file)
-                    
-                    if file_size > self.last_position:
-                        # 读取新增内容
+                if not os.path.exists(self.log_file):
+                    # 日志文件被删除或轮转，尝试寻找新文件
+                    stale_counter += 1
+                    if stale_counter > 3:
+                        self._recover_log_file()
+                        stale_counter = 0
+                    time.sleep(1)
+                    continue
+
+                file_size = os.path.getsize(self.log_file)
+
+                # 检测文件被截断（轮转时文件清空重新写入）
+                if file_size < self.last_position:
+                    logger.debug("检测到日志文件被截断（可能发生了轮转），重置读取位置")
+                    self.last_position = 0
+                    stale_counter = 0
+
+                if file_size > self.last_position:
+                    stale_counter = 0
+                    try:
                         with open(self.log_file, 'r', encoding='utf-8') as f:
                             f.seek(self.last_position)
                             new_lines = f.readlines()
                             self.last_position = f.tell()
-                        
-                        # 解析新增的日志行
-                        for line in new_lines:
-                            self.parse_log_line(line.strip())
-                
-                time.sleep(0.5)  # 每0.5秒检查一次
-                
+                    except (IOError, OSError) as io_err:
+                        logger.debug(f"读取日志文件失败: {io_err}")
+                        time.sleep(0.5)
+                        continue
+                    except UnicodeDecodeError:
+                        self.last_position = file_size
+                        time.sleep(0.5)
+                        continue
+
+                    for line in new_lines:
+                        self.parse_log_line(line.strip())
+                else:
+                    stale_counter += 1
+                    if stale_counter >= max_stale_checks:
+                        # 长时间无变化，检查文件是否仍然有效
+                        self.last_position = 0
+                        stale_counter = 0
+
+                time.sleep(0.5)
+
             except Exception as e:
-                time.sleep(1)  # 出错时等待1秒
+                stale_counter += 1
+                time.sleep(1)
     
     def parse_log_line(self, line: str):
         """解析日志行"""
@@ -116,7 +158,7 @@ class FileLogCollector:
                 # 转换时间格式
                 try:
                     timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S.%f')
-                except:
+                except Exception:
                     timestamp = datetime.now()
                 
                 log_entry = {

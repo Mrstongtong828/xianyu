@@ -631,7 +631,7 @@ async def process_qr_login_cookies(cookies: str, unb: str, current_user: Dict[st
                 if existing_cookie_dict.get('unb') == unb:
                     existing_account_id = account_id
                     break
-            except:
+            except Exception:
                 continue
 
         # 确定账号ID

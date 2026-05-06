@@ -357,7 +357,7 @@ class AIReplyEngine:
             if not skip_wait:
                 logger.info(f"【{cookie_id}】消息已保存，等待10秒收集后续消息: {message[:20]}... (时间:{message_created_at})")
                 # 固定等待10秒，等待可能的后续消息（在锁外延迟，避免阻塞其他消息保存）
-                time.sleep(10)
+                time.sleep(10)  # WARNING: blocking call in sync context — consider async refactor if this function becomes async
             else:
                 logger.info(f"【{cookie_id}】消息已保存（外部防抖已启用，跳过内部等待）: {message[:20]}... (时间:{message_created_at})")
             

@@ -1729,8 +1729,19 @@ class DrissionHandler:
 
     def close(self):
         """关闭浏览器"""
-        # logger.info("关闭浏览器")
-        self.browser.quit()
+        if self.browser is None:
+            return
+        try:
+            self.browser.quit()
+        except Exception as e:
+            logger.warning(f"DrissionPage浏览器正常关闭失败: {e}，尝试强制清理...")
+            try:
+                self.browser.quit(force=True)
+            except Exception:
+                pass
+        finally:
+            self.browser = None
+            self.page = None
 
 
 class XianyuApis:

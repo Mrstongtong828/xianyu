@@ -302,6 +302,7 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
 
     async def _cancel_background_tasks(self):
         """取消并清理所有后台任务（保留此方法用于程序退出时的完整清理）"""
+        self._running = False  # 通知所有循环任务退出
         try:
             tasks_to_cancel = []
             
@@ -498,18 +499,20 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
             logger.info(f"【{self.cookie_id}】后台任务引用已全部重置")
 
     def _calculate_retry_delay(self, error_msg: str) -> int:
-        """根据错误类型和失败次数计算重试延迟"""
-        # WebSocket意外断开 - 短延迟
+        """根据错误类型和失败次数计算重试延迟（指数退避）"""
+        failures = max(1, self.connection_failures)
+
+        # WebSocket意外断开 - 短延迟（指数退避，上限30s）
         if "no close frame received or sent" in error_msg:
-            return min(3 * self.connection_failures, 15)
-        
-        # 网络连接问题 - 长延迟
+            return min(2 ** failures, 30)
+
+        # 网络连接问题 - 长延迟（指数退避，上限120s）
         elif "Connection refused" in error_msg or "timeout" in error_msg.lower():
-            return min(10 * self.connection_failures, 60)
-        
-        # 其他未知错误 - 中等延迟
+            return min(5 * (2 ** failures), 120)
+
+        # 其他未知错误 - 中等延迟（指数退避，上限60s）
         else:
-            return min(5 * self.connection_failures, 30)
+            return min(3 * (2 ** failures), 60)
 
     def _cleanup_instance_caches(self):
         """清理实例级别的缓存，防止内存泄漏"""
@@ -792,6 +795,10 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
         # {chat_id: {'task': asyncio.Task, 'last_message': dict, 'timer': float}}
         self.message_debounce_tasks = {}  # 存储每个chat_id的防抖任务
         self.message_debounce_delay = 1  # 防抖延迟时间（秒）：用户停止发送消息1秒后才回复
+        self.message_debounce_lock = asyncio.Lock()  # 防抖任务管理的锁
+
+        # 运行状态标志（用于控制后台循环任务）
+        self._running = True
         self.message_debounce_lock = asyncio.Lock()  # 防抖任务管理的锁
         
         # 消息去重机制：防止同一条消息被处理多次
@@ -1551,6 +1558,249 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
         except Exception as e:
             logger.error(f"【{self.cookie_id}】处理滑块验证时出错: {self._safe_str(e)}")
             return None
+
+    def reset_qr_cookie_refresh_flag(self):
+        """重置扫码登录Cookie刷新标志，确保账号密码登录后能立即刷新Cookie"""
+        self.last_qr_cookie_refresh_time = 0
+        logger.info(f"【{self.cookie_id}】已重置扫码登录Cookie刷新标志")
+
+    async def _try_password_login_refresh(self, reason: str = "") -> bool:
+        """尝试通过数据库中保存的账号密码重新登录以刷新Cookie
+
+        Args:
+            reason: 触发刷新的原因（用于日志）
+
+        Returns:
+            bool: 刷新成功返回True，失败返回False
+        """
+        try:
+            logger.info(f"【{self.cookie_id}】开始尝试密码登录刷新，触发原因: {reason}")
+
+            account_info = db_manager.get_cookie_details(self.cookie_id)
+            if not account_info:
+                logger.warning(f"【{self.cookie_id}】未找到账号信息，无法执行密码登录刷新")
+                return False
+
+            username = account_info.get('username', '')
+            password = account_info.get('password', '')
+            show_browser = account_info.get('show_browser', False)
+
+            if not username or not password:
+                logger.warning(f"【{self.cookie_id}】账号或密码为空，无法执行密码登录刷新")
+                return False
+
+            logger.info(f"【{self.cookie_id}】使用账号 {username} 进行密码登录刷新 (show_browser={show_browser})")
+
+            from utils.xianyu_slider_stealth import XianyuSliderStealth, concurrency_manager
+
+            loop = asyncio.get_event_loop()
+
+            def do_password_login():
+                slider_instance = None
+                try:
+                    slider_instance = XianyuSliderStealth(
+                        user_id=self.cookie_id,
+                        enable_learning=True,
+                        headless=not show_browser
+                    )
+                    cookies_dict = slider_instance.login_with_password_playwright(
+                        account=username,
+                        password=password,
+                        show_browser=show_browser
+                    )
+                    return cookies_dict
+                finally:
+                    if slider_instance:
+                        try:
+                            concurrency_manager.unregister_instance(self.cookie_id)
+                        except:
+                            pass
+
+            cookies_dict = await loop.run_in_executor(None, do_password_login)
+
+            if not cookies_dict:
+                logger.error(f"【{self.cookie_id}】密码登录失败，未能获取Cookie")
+                await self.send_token_refresh_notification(
+                    f"密码登录刷新Cookie失败（原因: {reason}），账号: {username}",
+                    "token_scheduled_refresh_failed"
+                )
+                return False
+
+            cookies_str = '; '.join([f"{k}={v}" for k, v in cookies_dict.items()])
+            logger.info(f"【{self.cookie_id}】密码登录成功，获取到 {len(cookies_dict)} 个Cookie字段")
+
+            db_manager.update_cookie_account_info(
+                self.cookie_id,
+                cookie_value=cookies_str,
+                username=username,
+                password=password,
+                show_browser=show_browser
+            )
+
+            self.cookies_str = cookies_str
+            self.cookies = trans_cookies(cookies_str)
+            from cookie_manager import manager as cookie_manager
+            if cookie_manager:
+                cookie_manager.manager.update_cookie(self.cookie_id, cookies_str, save_to_db=False)
+                logger.info(f"【{self.cookie_id}】已更新cookie_manager中的Cookie（内存）")
+
+            self.last_cookie_refresh_time = time.time()
+            self.browser_cookie_refreshed = True
+
+            logger.info(f"【{self.cookie_id}】密码登录刷新Cookie成功")
+            return True
+
+        except Exception as e:
+            logger.error(f"【{self.cookie_id}】密码登录刷新异常: {self._safe_str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    async def _refresh_cookies_via_browser(self, triggered_by_refresh_token: bool = False) -> bool:
+        """通过浏览器访问闲鱼页面来刷新Cookie
+
+        Args:
+            triggered_by_refresh_token: 是否由Token刷新触发
+
+        Returns:
+            bool: 刷新成功返回True，失败返回False
+        """
+        try:
+            logger.info(f"【{self.cookie_id}】开始通过浏览器刷新Cookie (triggered_by_refresh_token={triggered_by_refresh_token})")
+
+            if not self.cookies_str:
+                logger.warning(f"【{self.cookie_id}】当前无Cookie，跳过浏览器刷新")
+                return False
+
+            from utils.refresh_util import DrissionHandler
+
+            loop = asyncio.get_event_loop()
+
+            def do_browser_refresh():
+                drission = None
+                try:
+                    account_info = db_manager.get_cookie_details(self.cookie_id)
+                    show_browser = account_info.get('show_browser', False) if account_info else False
+
+                    drission = DrissionHandler(
+                        max_retries=1,
+                        is_headless=not show_browser,
+                        maximize_window=True,
+                        show_mouse_trace=False
+                    )
+                    fresh_cookies = drission.get_cookies(
+                        url='https://www.goofish.com/im',
+                        existing_cookies_str=self.cookies_str,
+                        cookie_id=self.cookie_id
+                    )
+                    return fresh_cookies
+                except Exception as e:
+                    logger.error(f"【{self.cookie_id}】浏览器刷新过程中出错: {str(e)}")
+                    return None
+                finally:
+                    if drission:
+                        try:
+                            drission.close()
+                        except:
+                            pass
+
+            fresh_cookies_str = await loop.run_in_executor(None, do_browser_refresh)
+
+            if fresh_cookies_str:
+                logger.info(f"【{self.cookie_id}】浏览器刷新获取到新Cookie (长度: {len(fresh_cookies_str)})")
+
+                db_manager.update_cookie_account_info(self.cookie_id, cookie_value=fresh_cookies_str)
+
+                self.cookies_str = fresh_cookies_str
+                self.cookies = trans_cookies(fresh_cookies_str)
+                from cookie_manager import manager as cookie_manager
+                if cookie_manager:
+                    cookie_manager.manager.update_cookie(self.cookie_id, fresh_cookies_str, save_to_db=False)
+
+                self.last_cookie_refresh_time = time.time()
+                self.browser_cookie_refreshed = True
+
+                logger.info(f"【{self.cookie_id}】浏览器刷新Cookie成功")
+                return True
+            else:
+                logger.warning(f"【{self.cookie_id}】浏览器刷新未获取到有效Cookie")
+                return False
+
+        except Exception as e:
+            logger.error(f"【{self.cookie_id}】浏览器刷新Cookie异常: {self._safe_str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    async def refresh_cookies_from_qr_login(self, qr_cookies_str: str, cookie_id: str, user_id: int = None) -> bool:
+        """使用扫码登录Cookie访问闲鱼页面获取真实Cookie并存入数据库
+
+        Args:
+            qr_cookies_str: 扫码登录获得的临时Cookie
+            cookie_id: 账号ID
+            user_id: 用户ID
+
+        Returns:
+            bool: 刷新成功返回True，失败返回False
+        """
+        try:
+            logger.info(f"【{cookie_id}】开始使用扫码Cookie获取真实Cookie...")
+
+            if not qr_cookies_str:
+                logger.warning(f"【{cookie_id}】扫码Cookie为空，无法获取真实Cookie")
+                return False
+
+            from utils.refresh_util import DrissionHandler
+
+            loop = asyncio.get_event_loop()
+
+            def do_refresh():
+                drission = None
+                try:
+                    drission = DrissionHandler(
+                        max_retries=3,
+                        is_headless=True,
+                        maximize_window=True,
+                        show_mouse_trace=False
+                    )
+                    fresh_cookies = drission.get_cookies(
+                        url='https://www.goofish.com/im',
+                        existing_cookies_str=qr_cookies_str,
+                        cookie_id=cookie_id
+                    )
+                    return fresh_cookies
+                except Exception as e:
+                    logger.error(f"【{cookie_id}】扫码Cookie刷新过程出错: {str(e)}")
+                    return None
+                finally:
+                    if drission:
+                        try:
+                            drission.close()
+                        except:
+                            pass
+
+            fresh_cookies_str = await loop.run_in_executor(None, do_refresh)
+
+            if fresh_cookies_str and len(fresh_cookies_str) > 100:
+                logger.info(f"【{cookie_id}】成功获取真实Cookie (长度: {len(fresh_cookies_str)})")
+
+                from db_manager import db_manager
+                db_manager.update_cookie_account_info(cookie_id, cookie_value=fresh_cookies_str)
+
+                self.last_cookie_refresh_time = time.time()
+                self.browser_cookie_refreshed = True
+
+                logger.info(f"【{cookie_id}】扫码Cookie刷新成功，已保存真实Cookie到数据库")
+                return True
+            else:
+                logger.warning(f"【{cookie_id}】扫码Cookie刷新失败，未获取到有效Cookie")
+                return False
+
+        except Exception as e:
+            logger.error(f"【{cookie_id}】扫码Cookie刷新异常: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
 
     async def _restart_instance(self):
         """重启XianyuLive实例
@@ -2749,6 +2999,53 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
             # 确保任务能正常结束
             logger.info(f"【{self.cookie_id}】Token刷新循环已退出")
 
+    async def cookie_refresh_loop(self):
+        """Cookie刷新循环 - 定期通过浏览器刷新Cookie"""
+        try:
+            while True:
+                try:
+                    from cookie_manager import manager as cookie_manager
+                    if cookie_manager and not cookie_manager.get_cookie_status(self.cookie_id):
+                        logger.info(f"【{self.cookie_id}】账号已禁用，停止Cookie刷新循环")
+                        break
+
+                    current_time = time.time()
+                    time_since_last_refresh = current_time - self.last_cookie_refresh_time
+
+                    if time_since_last_refresh >= self.cookie_refresh_interval:
+                        time_since_last_message = current_time - self.last_message_received_time
+                        if self.last_message_received_time > 0 and time_since_last_message < self.message_cookie_refresh_cooldown:
+                            remaining_time = self.message_cookie_refresh_cooldown - time_since_last_message
+                            logger.info(f"【{self.cookie_id}】收到消息后冷却中，跳过本次Cookie刷新，还需等待 {int(remaining_time)} 秒")
+                        else:
+                            async with self.cookie_refresh_lock:
+                                time_since_last = time.time() - self.last_cookie_refresh_time
+                                if time_since_last >= self.cookie_refresh_interval:
+                                    logger.info(f"【{self.cookie_id}】Cookie刷新周期到，开始通过浏览器刷新...")
+                                    success = await self._refresh_cookies_via_browser(triggered_by_refresh_token=False)
+                                    if success:
+                                        self.last_cookie_refresh_time = time.time()
+                                        self.last_qr_cookie_refresh_time = 0
+                                        self.last_message_received_time = 0
+                                        logger.info(f"【{self.cookie_id}】Cookie刷新成功")
+                                    else:
+                                        logger.warning(f"【{self.cookie_id}】Cookie刷新失败，将在下次周期重试")
+
+                    await self._interruptible_sleep(self._randomize_interval(60, 0.2))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error(f"【{self.cookie_id}】Cookie刷新循环出错: {self._safe_str(e)}")
+                    try:
+                        await self._interruptible_sleep(self._randomize_interval(60, 0.2))
+                    except asyncio.CancelledError:
+                        raise
+        except asyncio.CancelledError:
+            logger.info(f"【{self.cookie_id}】Cookie刷新循环已取消")
+            raise
+        finally:
+            logger.info(f"【{self.cookie_id}】Cookie刷新循环已退出")
+
     async def init(self, ws):
         # 如果没有token或者token过期，获取新token
         token_refresh_attempted = False
@@ -2860,6 +3157,12 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
 
                     if consecutive_failures >= max_failures:
                         logger.error(f"【{self.cookie_id}】心跳连续失败{max_failures}次，停止心跳循环")
+                        # 主动关闭 WebSocket 以触发重连
+                        if not ws.closed:
+                            try:
+                                await asyncio.wait_for(ws.close(), timeout=3.0)
+                            except Exception:
+                                pass
                         break
 
                     # 失败后短暂等待再重试，使用可中断的sleep
@@ -2919,6 +3222,10 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
 
                     # 清理过期的通知、发货和订单确认记录（防止内存泄漏）
                     self._cleanup_instance_caches()
+                    await asyncio.sleep(0)  # 让出控制权，允许检查取消信号
+
+                    # 健康检查：清理已完成的后台任务引用，检测死任务
+                    self._health_check_background_tasks()
                     await asyncio.sleep(0)  # 让出控制权，允许检查取消信号
 
                     # 清理QR登录过期会话（每5分钟检查一次）

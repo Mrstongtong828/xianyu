@@ -12,10 +12,8 @@ import secrets
 import hashlib
 import asyncio
 import io
-import pandas as pd
 from pathlib import Path
 
-from shared import *
 from shared import (
     db_manager, cookie_manager, logger, ai_reply_engine,
     verify_token, verify_admin_token, require_auth, get_current_user,
@@ -25,6 +23,21 @@ from shared import (
     qr_check_processed, password_login_sessions, password_login_locks,
     cleanup_qr_check_records, DEFAULT_ADMIN_PASSWORD, ADMIN_USERNAME,
     CAPTCHA_ROUTER_AVAILABLE,
+    # Models
+    LoginRequest, LoginResponse, ChangePasswordRequest,
+    RegisterRequest, RegisterResponse, SendCodeRequest, SendCodeResponse,
+    CaptchaRequest, CaptchaResponse, VerifyCaptchaRequest, VerifyCaptchaResponse,
+    RequestModel, ResponseData, ResponseModel, ItemScheduleRequest,
+    GeetestRegisterResponse, GeetestValidateRequest, GeetestValidateResponse,
+    SendMessageRequest, SendMessageResponse, CookieIn, CookieStatusIn, DefaultReplyIn,
+    NotificationChannelIn, NotificationChannelUpdate, MessageNotificationIn,
+    SystemSettingIn, SystemSettingCreateIn, AccountLoginInfoUpdate,
+    CookieAccountInfo, RegistrationSettingUpdate, LoginInfoSettingUpdate,
+    AutoConfirmUpdate, RemarkUpdate, PauseDurationUpdate,
+    KeywordIn, KeywordWithItemIdIn, ItemSearchRequest, ItemSearchMultipleRequest,
+    ItemDetailUpdate, BatchDeleteRequest, AIReplySettings,
+    ItemToDelete, BlacklistAddRequest, DeliveryRetryQuery,
+    BatchCardImportItem, BatchCardImportRequest,
     # Geetest
     geetest_status_store, set_geetest_status, get_geetest_status,
     # API
@@ -593,36 +606,28 @@ def get_system_stats(admin_user: Dict[str, Any] = Depends(require_admin)):
     try:
         log_with_user('info', "查询系统统计信息", admin_user)
 
-        # 用户统计
-        all_users = db_manager.get_all_users()
-        total_users = len(all_users)
+        with db_manager.lock:
+            cursor = db_manager.conn.cursor()
 
-        # Cookie统计
-        all_cookies = db_manager.get_all_cookies()
-        total_cookies = len(all_cookies)
-        
-        # 活跃账号统计（启用状态的账号）
-        active_cookies = 0
-        for cookie_id in all_cookies.keys():
-            status = db_manager.get_cookie_status(cookie_id)
-            if status:
-                active_cookies += 1
+            cursor.execute("SELECT COUNT(*) FROM users")
+            total_users = cursor.fetchone()[0]
 
-        # 卡券统计
-        all_cards = db_manager.get_all_cards()
-        total_cards = len(all_cards) if all_cards else 0
+            cursor.execute("SELECT COUNT(*), SUM(CASE WHEN cs.enabled THEN 1 ELSE 0 END) FROM cookies c LEFT JOIN cookie_status cs ON cs.cookie_id = c.id")
+            row = cursor.fetchone()
+            total_cookies = row[0] or 0
+            active_cookies = row[1] or 0
 
-        # 关键词统计
-        all_keywords = db_manager.get_all_keywords()
-        total_keywords = sum(len(kw_list) for kw_list in all_keywords.values())
+            cursor.execute("SELECT COUNT(*) FROM cards")
+            total_cards = cursor.fetchone()[0]
 
-        # 订单统计
-        total_orders = 0
-        try:
-            orders = db_manager.get_all_orders()
-            total_orders = len(orders) if orders else 0
-        except:
-            pass
+            cursor.execute("SELECT COUNT(*) FROM keywords")
+            total_keywords = cursor.fetchone()[0]
+
+            try:
+                cursor.execute("SELECT COUNT(*) FROM orders")
+                total_orders = cursor.fetchone()[0]
+            except Exception:
+                total_orders = 0
 
         stats = {
             "total_users": total_users,
@@ -1191,9 +1196,10 @@ def clear_default_reply_records(cid: str, current_user: Dict[str, Any] = Depends
 
 @router.post('/api/feishu/command')
 async def feishu_command_callback(request: Request):
-    """接收飞书 Outgoing Webhook 回调，执行远程命令
+    """接收飞书 Outgoing Webhook 回调，执行远程命令或解析闲鱼链接
 
-    支持的命令：
+    支持的功能：
+    - 自动识别闲鱼链接并触发议价
     - 恢复全部                 → 恢复所有账号暂停
     - 恢复 [cookie_id]        → 恢复指定账号所有暂停
     - 暂停 [cookie_id] [分钟]  → 暂停指定账号
@@ -1222,6 +1228,42 @@ async def feishu_command_callback(request: Request):
     clean_text = re.sub(r'<at[^>]*>', '', raw_text).strip()
     logger.info(f"飞书命令回调: {clean_text[:200]}")
 
+    # 检查是否包含闲鱼链接，如果包含则触发议价流程
+    from feishu_link_parser import extract_goofish_urls
+    goofish_urls = extract_goofish_urls(clean_text)
+
+    if goofish_urls:
+        logger.info(f"检测到 {len(goofish_urls)} 个闲鱼链接，触发议价流程")
+        import asyncio as _asyncio
+
+        async def _background_bargain():
+            from bargain_engine import handle_feishu_bargain_request
+            try:
+                results = await handle_feishu_bargain_request(goofish_urls)
+                logger.info(f"议价处理完成: 成功{len(results['success'])}, 失败{len(results['failed'])}")
+                for note in results.get('notifications', []):
+                    logger.info(f"议价通知: {note[:200]}...")
+            except Exception as e:
+                logger.error(f"后台议价处理异常: {e}")
+
+        try:
+            loop = _asyncio.get_running_loop()
+            loop.create_task(_background_bargain())
+        except RuntimeError:
+            _asyncio.run(_background_bargain())
+
+        reply_lines = [f"🔍 检测到 {len(goofish_urls)} 个闲鱼链接，已启动议价流程..."]
+        for i, url in enumerate(goofish_urls, 1):
+            from feishu_link_parser import parse_goofish_url
+            parsed = parse_goofish_url(url)
+            if parsed.get('item_id'):
+                reply_lines.append(f"  {i}. 商品ID: {parsed['item_id']}")
+            elif parsed.get('user_id'):
+                reply_lines.append(f"  {i}. 卖家ID: {parsed['user_id']}")
+        reply_lines.append("\n请稍候，系统将自动查价并发起议价...")
+        return JSONResponse({'msg': '\n'.join(reply_lines)})
+
+    # 没有闲鱼链接，走原有命令处理逻辑
     reply = _handle_feishu_command(clean_text)
     return JSONResponse({'msg': reply})
 

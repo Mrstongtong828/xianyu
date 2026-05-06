@@ -703,6 +703,19 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(order_status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_orders_buyer_id ON orders(buyer_id)')
+            # Orders表索引（加速仪表盘查询）
+            try:
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(DATE(created_at))")
+            except Exception:
+                pass
+            try:
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_item_id ON orders(item_id)")
+            except Exception:
+                pass
+            try:
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_city ON orders(receiver_city)")
+            except Exception:
+                pass
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_conv_cookie_chat ON ai_conversations(cookie_id, chat_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_ai_conv_created ON ai_conversations(created_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_email_ver_email ON email_verifications(email)')
@@ -780,7 +793,7 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
                     # 如果重建失败，尝试回滚
                     try:
                         cursor.execute("DROP TABLE IF EXISTS cards_new")
-                    except:
+                    except Exception:
                         pass
             else:
                 logger.error(f"检查cards表约束时出现未知错误: {e}")
@@ -834,6 +847,13 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
                 self.set_system_setting("db_version", "1.5", "数据库版本号")
                 logger.info("数据库升级到版本1.5完成")
 
+            # 升级到版本1.6 - 添加微信登录绑定字段
+            if current_version < "1.6":
+                logger.info("开始升级数据库到版本1.6...")
+                self.upgrade_users_add_wechat_fields(cursor)
+                self.set_system_setting("db_version", "1.6", "数据库版本号")
+                logger.info("数据库升级到版本1.6完成")
+
             # 迁移遗留数据（在所有版本升级完成后执行）
             self.migrate_legacy_data(cursor)
 
@@ -841,6 +861,42 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
             logger.error(f"数据库版本检查或升级失败: {e}")
             raise
             
+    def upgrade_users_add_wechat_fields(self, cursor):
+        try:
+            # 添加微信相关字段
+            for col, col_def in [
+                ('wechat_openid', 'TEXT'),
+                ('wechat_unionid', 'TEXT'),
+                ('wechat_nickname', "TEXT DEFAULT ''"),
+                ('wechat_avatar_url', "TEXT DEFAULT ''"),
+                ('wechat_bound_at', 'REAL DEFAULT 0'),
+            ]:
+                try:
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {col_def}")
+                except Exception:
+                    pass
+
+            # 为wechat_openid创建唯一索引
+            try:
+                cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_wechat_openid ON users(wechat_openid)")
+            except Exception:
+                pass
+
+            # 创建微信登录状态表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS wechat_login_states (
+                state TEXT PRIMARY KEY,
+                expires_at REAL NOT NULL,
+                used BOOLEAN DEFAULT FALSE,
+                wechat_data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+            self.conn.commit()
+            logger.info("微信字段和登录状态表创建成功")
+        except Exception as e:
+            logger.error(f"添加微信字段失败: {e}")
+
     def migrate_legacy_data(self, cursor):
         """迁移遗留数据到新表结构"""
         try:
@@ -975,7 +1031,7 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
             # 如果迁移失败，尝试回滚
             try:
                 cursor.execute('DROP TABLE IF EXISTS keywords_temp')
-            except:
+            except Exception:
                 pass
             raise
 
@@ -1146,11 +1202,11 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
             try:
                 # Windows系统字体
                 font = ImageFont.truetype("arial.ttf", 20)
-            except:
+            except Exception:
                 try:
                     # 备用字体
                     font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 20)
-                except:
+                except Exception:
                     # 使用默认字体
                     font = ImageFont.load_default()
 
@@ -1673,7 +1729,7 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
                 if row:
                     return {'auto_reply_count': row[0], 'auto_delivery_count': row[1], 'date': today}
                 return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
-        except:
+        except Exception:
             return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
 
     def increment_daily_quota(self, cookie_id: str, quota_type: str) -> dict:
@@ -1691,7 +1747,7 @@ class DBManager(ItemManagerMixin, CookieManagerMixin, UserManagerMixin, Notifica
                 ''', (cookie_id, today))
                 self.conn.commit()
                 return self.get_daily_quota(cookie_id)
-        except:
+        except Exception:
             return {'auto_reply_count': 0, 'auto_delivery_count': 0, 'date': today}
 
     def check_daily_quota(self, cookie_id: str, quota_type: str) -> tuple:

@@ -430,7 +430,7 @@ class CookieManagerMixin:
                     if item_info.get('item_detail'):
                         try:
                             item_info['item_detail_parsed'] = json.loads(item_info['item_detail'])
-                        except:
+                        except Exception:
                             item_info['item_detail_parsed'] = {}
 
                     items.append(item_info)

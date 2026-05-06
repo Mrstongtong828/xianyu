@@ -351,6 +351,12 @@ class OrderManagerMixin:
             try:
                 cursor = self.conn.cursor()
 
+                def _parse_amount(val):
+                    """解析金额字符串为浮点数"""
+                    if val is None or val == '' or val == 'N/A':
+                        return 0.0
+                    return float(str(val).replace('¥', '').replace(',', '').strip() or 0)
+
                 # 构建WHERE条件
                 where_conditions = []
                 params = []
@@ -375,118 +381,144 @@ class OrderManagerMixin:
                     params.extend(include_statuses)
 
                 where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
+                amount_condition = "AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'"
 
-                # 1. 总收益统计（估值，实际会扣税等）
+                # 1. 按日期统计 - 选取原始amount，在Python中聚合，消除SQL层的REPLACE开销
                 cursor.execute(f"""
-                    SELECT
-                        COUNT(DISTINCT order_id) as total_orders,
-                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as total_amount,
-                        AVG(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as avg_amount,
-                        COUNT(DISTINCT buyer_id) as unique_buyers,
-                        COUNT(DISTINCT item_id) as unique_items
+                    SELECT DATE(created_at) as date, amount
                     FROM orders
                     {where_clause}
-                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
-                """, params)
-
-                row = cursor.fetchone()
-                revenue_stats = {
-                    'total_orders': row[0] or 0,
-                    'total_amount': round(row[1] or 0, 2),
-                    'avg_amount': round(row[2] or 0, 2),
-                    'unique_buyers': row[3] or 0,
-                    'unique_items': row[4] or 0
-                } if row else {}
-
-                # 2. 按日期统计订单量和收益
-                cursor.execute(f"""
-                    SELECT
-                        DATE(created_at) as date,
-                        COUNT(DISTINCT order_id) as order_count,
-                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as daily_amount
-                    FROM orders
-                    {where_clause}
-                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
-                    GROUP BY DATE(created_at)
+                    {amount_condition}
+                    AND DATE(created_at) IN (
+                        SELECT DATE(created_at)
+                        FROM orders
+                        {where_clause}
+                        {amount_condition}
+                        GROUP BY DATE(created_at)
+                        ORDER BY DATE(created_at) DESC
+                        LIMIT 30
+                    )
                     ORDER BY date DESC
-                    LIMIT 30
-                """, params)
+                """, params * 2)
+
+                from collections import OrderedDict
+                daily_dict = OrderedDict()
+                for row in cursor.fetchall():
+                    date, amount_str = row[0], str(row[1]) if row[1] is not None else ''
+                    if date not in daily_dict:
+                        daily_dict[date] = {'order_count': 0, 'total_amount': 0.0}
+                    daily_dict[date]['order_count'] += 1
+                    daily_dict[date]['total_amount'] += _parse_amount(amount_str)
 
                 daily_stats = []
-                for row in cursor.fetchall():
+                for date, data in daily_dict.items():
                     daily_stats.append({
-                        'date': row[0],
-                        'order_count': row[1],
-                        'amount': round(row[2] or 0, 2)
+                        'date': date,
+                        'order_count': data['order_count'],
+                        'amount': round(data['total_amount'], 2)
                     })
 
-                # 3. 按状态统计订单
+                # 从 daily_stats 计算 revenue_stats，省去一次独立表扫描
+                if daily_stats:
+                    total_orders_count = sum(d['order_count'] for d in daily_stats)
+                    total_amount_sum = sum(d['amount'] for d in daily_stats)
+                    revenue_stats = {
+                        'total_orders': total_orders_count,
+                        'total_amount': round(total_amount_sum, 2),
+                        'avg_amount': round(total_amount_sum / total_orders_count, 2) if total_orders_count > 0 else 0,
+                        'unique_buyers': 0,
+                        'unique_items': 0,
+                    }
+                else:
+                    revenue_stats = {'total_orders': 0, 'total_amount': 0, 'avg_amount': 0, 'unique_buyers': 0, 'unique_items': 0}
+
+                # 轻量查询：独立买家/商品数（无字符串解析开销）
                 cursor.execute(f"""
-                    SELECT
-                        order_status,
-                        COUNT(DISTINCT order_id) as count,
-                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as amount
+                    SELECT COUNT(DISTINCT buyer_id), COUNT(DISTINCT item_id)
                     FROM orders
                     {where_clause}
-                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
-                    GROUP BY order_status
-                    ORDER BY count DESC
+                    {amount_condition}
+                """, params)
+                row = cursor.fetchone()
+                if row and revenue_stats:
+                    revenue_stats['unique_buyers'] = row[0] or 0
+                    revenue_stats['unique_items'] = row[1] or 0
+
+                # 2. 按状态统计 - 原始amount + Python聚合
+                cursor.execute(f"""
+                    SELECT order_status, amount
+                    FROM orders
+                    {where_clause}
+                    {amount_condition}
                 """, params)
 
-                status_stats = []
+                status_dict = {}
                 for row in cursor.fetchall():
+                    status, amount_str = row[0] or 'unknown', str(row[1]) if row[1] is not None else ''
+                    if status not in status_dict:
+                        status_dict[status] = {'count': 0, 'total_amount': 0.0}
+                    status_dict[status]['count'] += 1
+                    status_dict[status]['total_amount'] += _parse_amount(amount_str)
+
+                status_stats = []
+                for status, data in sorted(status_dict.items(), key=lambda x: x[1]['count'], reverse=True):
                     status_stats.append({
-                        'status': row[0] or 'unknown',
-                        'count': row[1],
-                        'amount': round(row[2] or 0, 2)
+                        'status': status,
+                        'count': data['count'],
+                        'amount': round(data['total_amount'], 2)
                     })
 
-                # 4. 按城市统计地区分布（如果有收货城市数据）
+                # 3. 按城市统计 - 原始amount + Python聚合
                 cursor.execute(f"""
-                    SELECT
-                        receiver_city,
-                        COUNT(DISTINCT order_id) as order_count,
-                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as total_amount
+                    SELECT receiver_city, amount
                     FROM orders
                     {where_clause}
                     AND receiver_city IS NOT NULL AND receiver_city != ''
-                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
-                    GROUP BY receiver_city
-                    ORDER BY order_count DESC
-                    LIMIT 50
+                    {amount_condition}
                 """, params)
 
-                city_stats = []
+                city_dict = {}
                 for row in cursor.fetchall():
+                    city, amount_str = row[0], str(row[1]) if row[1] is not None else ''
+                    if city not in city_dict:
+                        city_dict[city] = {'order_count': 0, 'total_amount': 0.0}
+                    city_dict[city]['order_count'] += 1
+                    city_dict[city]['total_amount'] += _parse_amount(amount_str)
+
+                city_stats = []
+                for city, data in sorted(city_dict.items(), key=lambda x: x[1]['order_count'], reverse=True)[:50]:
                     city_stats.append({
-                        'city': row[0],
-                        'order_count': row[1],
-                        'total_amount': round(row[2] or 0, 2)
+                        'city': city,
+                        'order_count': data['order_count'],
+                        'total_amount': round(data['total_amount'], 2)
                     })
 
-                # 5. 商品排行（按订单量）
+                # 4. 商品排行 - 原始amount + Python聚合
                 cursor.execute(f"""
-                    SELECT
-                        item_id,
-                        COUNT(DISTINCT order_id) as order_count,
-                        SUM(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as total_amount,
-                        AVG(CAST(REPLACE(REPLACE(amount, '¥', ''), ',', '') AS REAL)) as avg_amount
+                    SELECT item_id, amount
                     FROM orders
                     {where_clause}
                     AND item_id IS NOT NULL AND item_id != ''
-                    AND amount IS NOT NULL AND amount != '' AND amount != 'N/A'
-                    GROUP BY item_id
-                    ORDER BY order_count DESC
-                    LIMIT 20
+                    {amount_condition}
                 """, params)
 
-                item_stats = []
+                item_dict = {}
                 for row in cursor.fetchall():
+                    item_id, amount_str = row[0], str(row[1]) if row[1] is not None else ''
+                    if item_id not in item_dict:
+                        item_dict[item_id] = {'order_count': 0, 'amounts': []}
+                    item_dict[item_id]['order_count'] += 1
+                    item_dict[item_id]['amounts'].append(_parse_amount(amount_str))
+
+                item_stats = []
+                for item_id, data in sorted(item_dict.items(), key=lambda x: x[1]['order_count'], reverse=True)[:20]:
+                    amts = data['amounts']
+                    total_amt = sum(amts)
                     item_stats.append({
-                        'item_id': row[0],
-                        'order_count': row[1],
-                        'total_amount': round(row[2] or 0, 2),
-                        'avg_amount': round(row[3] or 0, 2)
+                        'item_id': item_id,
+                        'order_count': data['order_count'],
+                        'total_amount': round(total_amt, 2),
+                        'avg_amount': round(total_amt / len(amts), 2) if amts else 0
                     })
 
                 return {

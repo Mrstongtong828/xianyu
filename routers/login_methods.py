@@ -19,35 +19,12 @@ from loguru import logger
 # 导入速率限制
 from utils.rate_limiter import rate_limit
 
-# 扫码登录检查锁 - 防止并发处理同一个session
-from collections import defaultdict
 import asyncio
 
-qr_check_locks = defaultdict(lambda: asyncio.Lock())
-qr_check_processed = {}  # 记录已处理的session: {session_id: {'processed': bool, 'timestamp': float}}
-
-# 账号密码登录会话管理
-password_login_sessions = {}  # {session_id: {'account_id': str, 'account': str, 'password': str, 'show_browser': bool, 'status': str, 'verification_url': str, 'qr_code_url': str, 'slider_instance': object, 'task': asyncio.Task, 'timestamp': float}}
-password_login_locks = defaultdict(lambda: asyncio.Lock())
+from shared import qr_check_locks, qr_check_processed, password_login_sessions, password_login_locks, cleanup_qr_check_records
 
 # 导入认证函数
 from routers.auth import get_current_user, log_with_user
-
-def cleanup_qr_check_records():
-    """清理过期的扫码检查记录"""
-    current_time = time.time()
-    expired_sessions = []
-    
-    for session_id, record in qr_check_processed.items():
-        # 清理超过1小时的记录
-        if current_time - record['timestamp'] > 3600:
-            expired_sessions.append(session_id)
-    
-    for session_id in expired_sessions:
-        if session_id in qr_check_processed:
-            del qr_check_processed[session_id]
-        if session_id in qr_check_locks:
-            del qr_check_locks[session_id]
 
 # 密码登录接口（异步，支持人脸认证）
 @router.post("/password-login")
@@ -442,9 +419,8 @@ async def process_qr_login_cookies(cookies: str, unb: str, current_user: Dict[st
                 if existing_cookie_dict.get('unb') == unb:
                     existing_account_id = account_id
                     break
-            except:
+            except Exception:
                 continue
-        
         # 确定账号ID
         if existing_account_id:
             account_id = existing_account_id
@@ -671,13 +647,3 @@ async def get_qr_login_cooldown_status(
     except Exception as e:
         log_with_user('error', f"获取扫码登录冷却状态异常: {str(e)}", current_user)
         return {'success': False, 'message': f'获取状态异常: {str(e)}'}
-
-# 注意：需要实现 _execute_password_login 函数，这个函数在主文件中定义
-# 由于这个函数比较复杂，需要访问很多主文件中的变量和函数，暂时先不实现
-# 实际使用时，需要将这个函数也迁移到这个文件中
-
-async def _execute_password_login(session_id: str, account_id: str, account: str, password: str, show_browser: bool, user_id: int, current_user: Dict[str, Any]):
-    """执行密码登录任务"""
-    # 这个函数需要从主文件中完整迁移
-    # 由于代码较长，这里先留空，实际使用时需要完整实现
-    pass

@@ -3,11 +3,20 @@
 1. 创建 CookieManager，按配置文件 / 环境变量初始化账号任务
 2. 在后台线程启动 FastAPI (reply_server) 提供管理与自动回复接口
 3. 主协程保持运行
+
+启动参数:
+  --max-accounts N     最大同时启动的账号数（默认3）
+  --stagger-delay N    账号间启动间隔秒数（默认8秒）
+  --pool-size N        浏览器池最大实例数（默认2）
+  --quick              跳过非关键的环境检查（Node.js、前端构建）
+  --headless           强制无头模式启动浏览器
 """
 
 import os
 import sys
 import shutil
+import subprocess
+import argparse
 from pathlib import Path
 
 # 自动安装缺失的核心依赖
@@ -17,9 +26,35 @@ try:
 except ImportError:
     print("[INFO] 检测到缺少依赖，正在自动安装（首次运行需要几分钟）...")
     req = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'requirements.txt')
-    os.system(f'"{sys.executable}" -m pip install -r "{req}"')
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', req])
     print("[INFO] 安装完成，请重新运行程序。")
     sys.exit(0)
+
+# ==================== CLI 参数解析 ====================
+def _parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(
+        description='闲鱼超级管家 - 启动入口',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument('--max-accounts', type=int, default=3,
+                        help='最大同时启动的账号数（默认3，设为1最稳定）')
+    parser.add_argument('--stagger-delay', type=int, default=8,
+                        help='账号间启动间隔秒数（默认8秒）')
+    parser.add_argument('--pool-size', type=int, default=2,
+                        help='浏览器池最大实例数（默认2）')
+    parser.add_argument('--quick', action='store_true',
+                        help='跳过非关键的环境检查（Node.js检查、前端构建）')
+    parser.add_argument('--headless', action='store_true',
+                        help='强制所有浏览器以无头模式运行（减少资源占用）')
+    return parser.parse_args()
+
+STARTUP_ARGS = _parse_args()
+os.environ['XY_MAX_ACCOUNTS'] = str(STARTUP_ARGS.max_accounts)
+os.environ['XY_STAGGER_DELAY'] = str(STARTUP_ARGS.stagger_delay)
+os.environ['XY_POOL_SIZE'] = str(STARTUP_ARGS.pool_size)
+os.environ['XY_FORCE_HEADLESS'] = '1' if STARTUP_ARGS.headless else '0'
+print(f"[INFO] 启动参数: max_accounts={STARTUP_ARGS.max_accounts}, stagger_delay={STARTUP_ARGS.stagger_delay}s, pool_size={STARTUP_ARGS.pool_size}, quick={STARTUP_ARGS.quick}, headless={STARTUP_ARGS.headless}")
 
 # 设置标准输出编码为UTF-8（Windows兼容）
 def _setup_console_encoding():
@@ -63,6 +98,49 @@ def _setup_console_encoding():
 
 # 在程序启动时设置编码
 _setup_console_encoding()
+
+# ==================== 环境检查 ====================
+def _check_python_version():
+    """检查 Python 版本是否满足要求"""
+    required = (3, 11)
+    current = sys.version_info[:2]
+    if current < required:
+        print(f"[ERROR] Python 版本过低: {sys.version}")
+        print(f"        要求 Python >= {required[0]}.{required[1]}，当前 {current[0]}.{current[1]}")
+        print(f"        请安装 Python {required[0]}.{required[1]}+ 后重试")
+        sys.exit(1)
+    print(f"[OK] Python {current[0]}.{current[1]}.{sys.version_info[2]} - 版本满足要求")
+
+def _check_nodejs():
+    """检查 Node.js 和 npm 是否安装（前端构建需要）"""
+    try:
+        result = subprocess.run(
+            ['node', '--version'], capture_output=True, text=True, timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' and hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+        )
+        if result.returncode == 0:
+            print(f"[OK] Node.js {result.stdout.strip()} - 已安装")
+            result2 = subprocess.run(
+                ['npm', '--version'], capture_output=True, text=True, timeout=10,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' and hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+            if result2.returncode == 0:
+                print(f"[OK] npm {result2.stdout.strip()} - 已安装")
+                return True
+        print("[WARN] Node.js 未安装或不可用，前端将无法自动构建")
+        print("       请安装 Node.js: https://nodejs.org/ (推荐 LTS 版本)")
+        print("       安装后重新运行 Start.py 即可")
+        return False
+    except FileNotFoundError:
+        print("[WARN] 未检测到 Node.js，前端将无法自动构建")
+        print("       请安装 Node.js: https://nodejs.org/ (推荐 LTS 版本)")
+        return False
+    except Exception as e:
+        print(f"[WARN] Node.js 检查失败: {e}")
+        return False
+
+_check_python_version()
+_nodejs_available = _check_nodejs() if not STARTUP_ARGS.quick else False
 
 # 定义ASCII安全字符（备用方案）
 _OK = '[OK]'
@@ -117,7 +195,7 @@ def _migrate_database_files_early():
                         print(f"{_WARN} 发现旧{description}文件: {old_path}")
                         print(f"  新数据库位于: {new_path}")
                         print(f"  建议备份后删除旧文件")
-                except:
+                except Exception:
                     pass
     
     # 迁移备份文件
@@ -450,6 +528,17 @@ def _build_frontend():
 
     print("检查前端构建状态...")
 
+    # 如果 Node.js 不可用，跳过构建
+    if not _nodejs_available:
+        if static_dir.exists() and (static_dir / "index.html").exists():
+            print(f"[OK] 前端已构建，跳过（无需 Node.js）")
+            return True
+        else:
+            print(f"[WARN] 前端未构建且 Node.js 不可用，跳过构建")
+            print(f"       前端页面将无法访问。请安装 Node.js 后重新运行：")
+            print(f"       https://nodejs.org/")
+            return False
+
     # 检查是否需要重新构建
     need_build = False
 
@@ -548,19 +637,72 @@ def _build_frontend():
         return False
 
 
-# 尝试构建前端
-try:
-    build_success = _build_frontend()
-    if not build_success:
-        print(f"{_WARN} 前端构建失败，程序将继续启动但前端可能不可用")
-except Exception as e:
-    print(f"{_WARN} 前端构建检查失败: {e}")
-    print("   程序将继续启动，但前端可能不可用")
+# 尝试构建前端（--quick 模式跳过）
+if not STARTUP_ARGS.quick:
+    try:
+        build_success = _build_frontend()
+        if not build_success:
+            print(f"{_WARN} 前端构建失败，程序将继续启动但前端可能不可用")
+    except Exception as e:
+        print(f"{_WARN} 前端构建检查失败: {e}")
+        print("   程序将继续启动，但前端可能不可用")
+else:
+    print(f"{_INFO} --quick 模式，跳过前端构建检查")
+
+# ==================== 系统资源检查 ====================
+def _check_system_resources():
+    """检查系统可用资源，在低资源时给出警告和建议"""
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        cpu_percent = psutil.cpu_percent(interval=0.5)
+        available_gb = mem.available / (1024 ** 3)
+        total_gb = mem.total / (1024 ** 3)
+
+        print(f"{_INFO} 系统资源: CPU {cpu_percent:.1f}%, 可用内存 {available_gb:.1f}GB / {total_gb:.1f}GB")
+
+        # 每个浏览器实例大约占用 300-500MB
+        est_memory_per_account = 0.4
+        max_safe_accounts = max(1, int(available_gb / est_memory_per_account))
+        configured_accounts = STARTUP_ARGS.max_accounts
+
+        if available_gb < 1.0:
+            print(f"{_WARN} 可用内存不足1GB，强烈建议只启动1个账号!")
+            print(f"      推荐: python Start.py --max-accounts 1 --pool-size 1 --headless")
+            os.environ['XY_MAX_ACCOUNTS'] = '1'
+            os.environ['XY_POOL_SIZE'] = '1'
+        elif configured_accounts > max_safe_accounts:
+            suggested = max(1, max_safe_accounts - 1)
+            print(f"{_WARN} 当前可用内存仅支持约 {max_safe_accounts} 个账号，但配置了 {configured_accounts} 个")
+            print(f"      建议: python Start.py --max-accounts {suggested} --pool-size {suggested}")
+            os.environ['XY_MAX_ACCOUNTS'] = str(suggested)
+            os.environ['XY_POOL_SIZE'] = str(min(suggested, STARTUP_ARGS.pool_size))
+
+        # 设置进程优先级（Windows）
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                # BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.GetCurrentProcess()
+                kernel32.SetPriorityClass(handle, 0x00004000)
+                print(f"{_INFO} 已将当前进程优先级设为'低于正常'，减少对系统的影响")
+            except Exception:
+                pass
+
+        return True
+    except ImportError:
+        print(f"{_WARN} psutil 未安装，跳过系统资源检查")
+        return False
+
+_check_system_resources()
 
 # ==================== 现在可以安全地导入其他模块 ====================
 import asyncio
 import signal
 import threading
+import time
+import traceback as _traceback
 import uvicorn
 from urllib.parse import urlparse
 from loguru import logger
@@ -581,20 +723,17 @@ from file_log_collector import setup_file_logging
 
 
 def _start_api_server():
-    """后台线程启动 FastAPI 服务"""
+    """后台线程启动 FastAPI 服务（带自动重启）"""
     api_conf = AUTO_REPLY.get('api', {})
 
-    # 优先使用环境变量配置
-    host = os.getenv('API_HOST', '0.0.0.0')  # 默认绑定所有接口
+    host = os.getenv('API_HOST', '0.0.0.0')
     port = int(os.getenv('API_PORT', '8000'))
 
-    # 如果配置文件中有特定配置，则使用配置文件
     if 'host' in api_conf:
         host = api_conf['host']
     if 'port' in api_conf:
         port = api_conf['port']
 
-    # 兼容旧的URL配置方式
     if 'url' in api_conf and 'host' not in api_conf and 'port' not in api_conf:
         url = api_conf.get('url', 'http://0.0.0.0:8000/xianyu/reply')
         parsed = urlparse(url)
@@ -602,17 +741,32 @@ def _start_api_server():
             host = parsed.hostname
         port = parsed.port or 8000
 
-    logger.info(f"启动Web服务器: http://{host}:{port}")
-    # 在后台线程中创建独立事件循环并直接运行 server.serve()
-    import uvicorn
-    try:
-        config = uvicorn.Config("reply_server:app", host=host, port=port, log_level="info")
-        server = uvicorn.Server(config)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(server.serve())
-    except Exception as e:
-        logger.error(f"uvicorn服务器启动失败: {e}")
+    MAX_RESTART_ATTEMPTS = 5
+    RESTART_DELAY_BASE = 2
+    restart_count = 0
+
+    while restart_count < MAX_RESTART_ATTEMPTS:
+        try:
+            logger.info(f"启动Web服务器: http://{host}:{port} (第{restart_count + 1}次)")
+            config = uvicorn.Config("reply_server:app", host=host, port=port, log_level="info")
+            server = uvicorn.Server(config)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            server.loop = loop
+            loop.run_until_complete(server.serve())
+        except Exception as e:
+            restart_count += 1
+            if restart_count >= MAX_RESTART_ATTEMPTS:
+                logger.error(f"uvicorn服务器在{MAX_RESTART_ATTEMPTS}次尝试后仍失败，放弃重启: {e}")
+                break
+            delay = RESTART_DELAY_BASE * restart_count
+            logger.warning(f"uvicorn服务器异常退出，{delay}秒后重试 ({restart_count}/{MAX_RESTART_ATTEMPTS}): {e}")
+            time.sleep(delay)
+        else:
+            restart_count += 1
+            delay = RESTART_DELAY_BASE * restart_count
+            logger.warning(f"uvicorn服务器正常退出，{delay}秒后重试 ({restart_count}/{MAX_RESTART_ATTEMPTS})")
+            time.sleep(delay)
 
 
 
@@ -665,6 +819,15 @@ async def main():
             await asyncio.gather(*tasks, return_exceptions=True)
             logger.info(f"已取消 {len(tasks)} 个运行中的任务")
 
+        # 关闭浏览器池
+        try:
+            from utils.browser_pool import _global_browser_pool
+            if _global_browser_pool:
+                await _global_browser_pool.close_all()
+                logger.info("浏览器池已关闭")
+        except Exception as e:
+            logger.warning(f"关闭浏览器池失败: {e}")
+
         # 关闭数据库连接
         try:
             db_manager.close()
@@ -675,16 +838,16 @@ async def main():
         loop.stop()
 
     def _signal_handler():
-        asyncio.ensure_future(_shutdown())
+        loop.call_soon_threadsafe(lambda: asyncio.ensure_future(_shutdown()))
 
     try:
         if sys.platform != 'win32':
             loop.add_signal_handler(signal.SIGTERM, _signal_handler)
         loop.add_signal_handler(signal.SIGINT, _signal_handler)
     except (NotImplementedError, RuntimeError):
-        signal.signal(signal.SIGINT, lambda s, f: asyncio.ensure_future(_shutdown()))
+        signal.signal(signal.SIGINT, lambda s, f: _signal_handler())
         if sys.platform != 'win32':
-            signal.signal(signal.SIGTERM, lambda s, f: asyncio.ensure_future(_shutdown()))
+            signal.signal(signal.SIGTERM, lambda s, f: _signal_handler())
 
     # 创建 CookieManager 并在全局暴露
     print("创建 CookieManager...")
@@ -692,65 +855,155 @@ async def main():
     manager = cm.manager
     print("CookieManager 创建完成")
 
-    # 1) 从数据库加载的 Cookie 已经在 CookieManager 初始化时完成
-    # 为每个启用的 Cookie 启动任务
+    # ====== 先启动 API 服务（让用户第一时间能访问界面） ======
+    print("启动 API 服务线程...")
+    port = int(os.getenv('API_PORT', AUTO_REPLY.get('api', {}).get('port', 8000)))
+    threading.Thread(target=_start_api_server, daemon=True).start()
+    print("API 服务线程已启动")
+
+    # 等待 API 服务就绪
+    print("等待 API 服务就绪...")
+    import urllib.request
+    for _ in range(30):
+        await asyncio.sleep(0.5)
+        try:
+            urllib.request.urlopen(f'http://127.0.0.1:{port}/api/feishu/command?challenge=health')
+            print(f"{_OK} API 服务已就绪: http://127.0.0.1:{port}")
+            break
+        except Exception:
+            pass
+
+    # ====== 启动信息汇总 ======
+    host = os.getenv('API_HOST', '0.0.0.0')
+    print("=" * 55)
+    print("  闲鱼超级管家 启动成功!")
+    print(f"  本地访问: http://127.0.0.1:{port}")
+    if host != '127.0.0.1' and host != 'localhost':
+        import socket
+        try:
+            local_ip = socket.gethostbyname(socket.gethostname())
+            print(f"  局域网访问: http://{local_ip}:{port}")
+        except Exception:
+            pass
+    print(f"  默认管理员: admin")
+    print(f"  按 Ctrl+C 停止服务")
+    print("=" * 55)
+
+    # 延迟打开浏览器
+    import webbrowser
+    threading.Timer(1.0, lambda: webbrowser.open(f'http://127.0.0.1:{port}')).start()
+
+    # ====== 阶梯式启动账号任务（后台进行，不阻塞界面访问） ======
+    enabled_accounts = []
     for cid, val in manager.cookies.items():
-        # 检查账号是否启用
         if not manager.get_cookie_status(cid):
             logger.info(f"跳过禁用的 Cookie: {cid}")
             continue
+        enabled_accounts.append((cid, val))
+
+    max_accounts = int(os.getenv('XY_MAX_ACCOUNTS', '3'))
+    stagger_delay = int(os.getenv('XY_STAGGER_DELAY', '8'))
+
+    if len(enabled_accounts) > max_accounts:
+        print(f"{_WARN} 检测到 {len(enabled_accounts)} 个启用账号，将只启动前 {max_accounts} 个")
+        print(f"      如需启动更多，请使用: python Start.py --max-accounts {len(enabled_accounts)}")
+
+    started_count = 0
+    for idx, (cid, val) in enumerate(enabled_accounts):
+        if started_count >= max_accounts:
+            logger.warning(f"已达到最大账号数限制 ({max_accounts})，跳过剩余 {len(enabled_accounts) - started_count} 个账号")
+            break
+
+        if idx > 0:
+            print(f"等待 {stagger_delay} 秒后再启动下一个账号...")
+            await asyncio.sleep(stagger_delay)
 
         try:
-            # 直接启动任务，不重新保存到数据库
             from db_manager import db_manager
-            logger.info(f"正在获取Cookie详细信息: {cid}")
             cookie_info = db_manager.get_cookie_details(cid)
             user_id = cookie_info.get('user_id') if cookie_info else None
-            logger.info(f"Cookie详细信息获取成功: {cid}, user_id: {user_id}")
 
-            logger.info(f"正在创建异步任务: {cid}")
+            print(f"[{started_count + 1}/{min(len(enabled_accounts), max_accounts)}] 正在启动账号: {cid}...")
             task = loop.create_task(manager._run_xianyu(cid, val, user_id))
             manager.tasks[cid] = task
-            logger.info(f"启动数据库中的 Cookie 任务: {cid} (用户ID: {user_id})")
-            logger.info(f"任务已添加到管理器，当前任务数: {len(manager.tasks)}")
+            started_count += 1
+            print(f"{_OK} 账号 {cid} 已启动 (用户ID: {user_id}), 当前任务数: {len(manager.tasks)}")
         except Exception as e:
             logger.error(f"启动 Cookie 任务失败: {cid}, {e}")
             import traceback
             logger.error(f"详细错误信息: {traceback.format_exc()}")
-    
-    # 2) 如果配置文件中有新的 Cookie，也加载它们
+
+    print(f"{_OK} 账号启动完毕: {started_count} 个运行中")
+
+    # 如果配置文件中有新的 Cookie（不在数据库中的），也加载它们
     for entry in COOKIES_LIST:
         cid = entry.get('id')
         val = entry.get('value')
         if not cid or not val or cid in manager.cookies:
             continue
-        
+
         kw_file = entry.get('keywords_file')
         kw_list = load_keywords_file(kw_file) if kw_file else None
+        if len(manager.tasks) >= max_accounts:
+            logger.warning(f"已达到最大账号数限制 ({max_accounts})，跳过配置文件账号: {cid}")
+            continue
         manager.add_cookie(cid, val, kw_list)
         logger.info(f"从配置文件加载 Cookie: {cid}")
 
-    # 3) 若老环境变量仍提供单账号 Cookie，则作为 default 账号
+    # 若老环境变量仍提供单账号 Cookie，则作为 default 账号
     env_cookie = os.getenv('COOKIES_STR')
     if env_cookie and 'default' not in manager.list_cookies():
-        manager.add_cookie('default', env_cookie)
-        logger.info("从环境变量加载 default Cookie")
+        if len(manager.tasks) < max_accounts:
+            manager.add_cookie('default', env_cookie)
+            logger.info("从环境变量加载 default Cookie")
+        else:
+            logger.warning(f"已达到最大账号数限制 ({max_accounts})，跳过环境变量 Cookie")
 
-    # 启动 API 服务线程
-    print("启动 API 服务线程...")
-    threading.Thread(target=_start_api_server, daemon=True).start()
-    print("API 服务线程已启动")
+    # 启动任务心跳监控
+    import time as _time_module
+    async def _task_watchdog():
+        """定期检查任务健康状况，记录异常但不断开"""
+        while not shutdown_event.is_set():
+            await asyncio.sleep(30)
+            try:
+                manager = cm.manager
+                if manager:
+                    dead_tasks = []
+                    for cid, task in list(manager.tasks.items()):
+                        if task.done():
+                            exc = task.exception()
+                            if exc:
+                                logger.error(f"检测到任务异常退出: {cid}, 错误: {exc}")
+                                dead_tasks.append(cid)
+                            else:
+                                logger.warning(f"检测到任务意外退出: {cid}")
+                                dead_tasks.append(cid)
+                    if dead_tasks:
+                        logger.warning(f"共 {len(dead_tasks)} 个任务退出: {dead_tasks}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"任务看门狗检查失败: {e}")
 
-    # 延迟打开浏览器，等待服务器就绪
-    import webbrowser
-    port = int(os.getenv('API_PORT', AUTO_REPLY.get('api', {}).get('port', 8000)))
-    threading.Timer(3.0, lambda: webbrowser.open(f'http://127.0.0.1:{port}')).start()
+    watchdog_task = asyncio.ensure_future(_task_watchdog())
 
-    # 阻塞保持运行，直到收到关闭信号
-    print("主程序启动完成，保持运行...")
     await shutdown_event.wait()
+    watchdog_task.cancel()
+    try:
+        await watchdog_task
+    except asyncio.CancelledError:
+        pass
     logger.info("主程序已退出")
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n[INFO] 用户中断，程序退出")
+    except Exception as _main_error:
+        print(f"\n[CRITICAL] 主程序异常退出: {_main_error}")
+        _traceback.print_exc()
+        sys.exit(1)
+    finally:
+        print("[INFO] 程序已退出")

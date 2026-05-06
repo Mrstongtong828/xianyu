@@ -18,7 +18,11 @@ class CookieManager:
         self.cookie_status: Dict[str, bool] = {}  # 账号启用状态
         self.auto_confirm_settings: Dict[str, bool] = {}  # 自动确认发货设置
         self._task_locks: Dict[str, asyncio.Lock] = {}  # 每个cookie_id的任务锁，防止重复创建
+        self._health_monitor_task: Optional[asyncio.Task] = None  # 健康监控任务
+        self._task_restart_count: Dict[str, int] = {}  # 任务重启次数
+        self._max_restart_count = 5  # 最大连续重启次数
         self._load_from_db()
+        self._start_health_monitor()
 
     def _load_from_db(self):
         """从数据库加载所有Cookie、关键字和状态"""
@@ -75,7 +79,7 @@ class CookieManager:
             try:
                 import sys
                 sys.stdout.flush()
-            except:
+            except Exception:
                 pass
             
             await live.main()
@@ -88,7 +92,7 @@ class CookieManager:
             try:
                 import sys
                 sys.stdout.flush()
-            except:
+            except Exception:
                 pass
         except Exception as e:
             logger.error(f"【{cookie_id}】XianyuLive 任务异常: {e}")
@@ -98,7 +102,7 @@ class CookieManager:
             try:
                 import sys
                 sys.stdout.flush()
-            except:
+            except Exception:
                 pass
         finally:
             logger.info(f"【{cookie_id}】_run_xianyu方法执行结束")
@@ -106,7 +110,7 @@ class CookieManager:
             try:
                 import sys
                 sys.stdout.flush()
-            except:
+            except Exception:
                 pass
 
     async def _add_cookie_async(self, cookie_id: str, cookie_value: str, user_id: int = None):
@@ -422,6 +426,104 @@ class CookieManager:
     def get_auto_confirm_setting(self, cookie_id: str) -> bool:
         """获取账号的自动确认发货设置"""
         return self.auto_confirm_settings.get(cookie_id, True)  # 默认开启
+
+    # ======================== 任务健康监控 ========================
+
+    def _start_health_monitor(self):
+        """启动任务健康监控后台任务"""
+        if self._health_monitor_task is not None and not self._health_monitor_task.done():
+            return
+
+        async def _health_monitor_loop():
+            while True:
+                try:
+                    await asyncio.sleep(60)  # 每60秒检查一次
+                    await self._check_tasks_health()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error(f"健康监控循环异常: {e}")
+
+        self._health_monitor_task = self.loop.create_task(_health_monitor_loop())
+        logger.info("任务健康监控已启动")
+
+    async def _check_tasks_health(self):
+        """检查所有任务的健康状况，自动重启异常退出的任务"""
+        for cookie_id in list(self.tasks.keys()):
+            task = self.tasks.get(cookie_id)
+            if task is None:
+                continue
+
+            if not task.done():
+                continue
+
+            # 任务已结束
+            exc = None
+            try:
+                exc = task.exception()
+            except asyncio.InvalidStateError:
+                pass
+
+            restart_count = self._task_restart_count.get(cookie_id, 0)
+
+            if exc:
+                logger.error(
+                    f"【{cookie_id}】任务异常退出 (重启{restart_count}/{self._max_restart_count}): {exc}"
+                )
+            else:
+                logger.warning(
+                    f"【{cookie_id}】任务意外正常退出 (重启{restart_count}/{self._max_restart_count})"
+                )
+
+            # 清理旧任务
+            self.tasks.pop(cookie_id, None)
+
+            if restart_count >= self._max_restart_count:
+                logger.error(
+                    f"【{cookie_id}】已达最大重启次数 ({self._max_restart_count})，不再自动重启"
+                )
+                self._task_restart_count.pop(cookie_id, None)
+                continue
+
+            # 检查账号是否仍启用
+            if not self.get_cookie_status(cookie_id):
+                logger.info(f"【{cookie_id}】账号已禁用，跳过重启")
+                self._task_restart_count.pop(cookie_id, None)
+                continue
+
+            # 尝试自动重启
+            cookie_value = self.cookies.get(cookie_id)
+            if not cookie_value:
+                logger.error(f"【{cookie_id}】Cookie值不存在，无法重启")
+                self._task_restart_count.pop(cookie_id, None)
+                continue
+
+            self._task_restart_count[cookie_id] = restart_count + 1
+            delay = min(5 * (restart_count + 1), 60)  # 递增延迟，最大60秒
+            logger.info(f"【{cookie_id}】等待 {delay} 秒后重启...")
+            await asyncio.sleep(delay)
+
+            try:
+                cookie_info = db_manager.get_cookie_details(cookie_id)
+                user_id = cookie_info.get('user_id') if cookie_info else None
+
+                from XianyuAutoAsync import XianyuLive
+                live = XianyuLive(cookie_value, cookie_id=cookie_id, user_id=user_id)
+                new_task = self.loop.create_task(live.main())
+                self.tasks[cookie_id] = new_task
+                logger.info(f"【{cookie_id}】任务已自动重启 (第{restart_count + 1}次)")
+            except Exception as restart_e:
+                logger.error(f"【{cookie_id}】任务重启失败: {restart_e}")
+
+    def stop_health_monitor(self):
+        """停止健康监控"""
+        if self._health_monitor_task and not self._health_monitor_task.done():
+            self._health_monitor_task.cancel()
+            logger.info("任务健康监控已停止")
+
+    def reset_task_restart_count(self, cookie_id: str):
+        """重置任务重启计数（任务正常运行一段时间后调用）"""
+        self._task_restart_count.pop(cookie_id, None)
 
 
 # 在 Start.py 中会把此变量赋值为具体实例

@@ -12,10 +12,10 @@ import secrets
 import hashlib
 import asyncio
 import io
-import pandas as pd
 from pathlib import Path
 
-from shared import *
+from wechat_auth import wechat_auth, init_wechat_auth
+
 from shared import (
     db_manager, cookie_manager, logger, ai_reply_engine,
     verify_token, verify_admin_token, require_auth, get_current_user,
@@ -25,6 +25,21 @@ from shared import (
     qr_check_processed, password_login_sessions, password_login_locks,
     cleanup_qr_check_records, DEFAULT_ADMIN_PASSWORD, ADMIN_USERNAME,
     CAPTCHA_ROUTER_AVAILABLE,
+    # Models
+    LoginRequest, LoginResponse, ChangePasswordRequest,
+    RegisterRequest, RegisterResponse, SendCodeRequest, SendCodeResponse,
+    CaptchaRequest, CaptchaResponse, VerifyCaptchaRequest, VerifyCaptchaResponse,
+    RequestModel, ResponseData, ResponseModel, ItemScheduleRequest,
+    GeetestRegisterResponse, GeetestValidateRequest, GeetestValidateResponse,
+    SendMessageRequest, SendMessageResponse, CookieIn, CookieStatusIn, DefaultReplyIn,
+    NotificationChannelIn, NotificationChannelUpdate, MessageNotificationIn,
+    SystemSettingIn, SystemSettingCreateIn, AccountLoginInfoUpdate,
+    CookieAccountInfo, RegistrationSettingUpdate, LoginInfoSettingUpdate,
+    AutoConfirmUpdate, RemarkUpdate, PauseDurationUpdate,
+    KeywordIn, KeywordWithItemIdIn, ItemSearchRequest, ItemSearchMultipleRequest,
+    ItemDetailUpdate, BatchDeleteRequest, AIReplySettings,
+    ItemToDelete, BlacklistAddRequest, DeliveryRetryQuery,
+    BatchCardImportItem, BatchCardImportRequest,
     # Geetest
     geetest_status_store, set_geetest_status, get_geetest_status,
     # API
@@ -928,6 +943,152 @@ async def generate_captcha(request: CaptchaRequest, _rate=Depends(rate_limit(max
             session_id=request.session_id,
             message="图形验证码生成失败"
         )
+
+
+# ==================== 微信登录 ====================
+
+@router.get('/wechat/qrcode')
+async def get_wechat_qrcode():
+    if not wechat_auth or not wechat_auth.is_configured():
+        return {'success': False, 'message': '微信登录未配置'}
+    try:
+        state = wechat_auth.generate_login_state()
+        qrcode_base64 = wechat_auth.get_qrcode_base64(state)
+        return {'success': True, 'state': state, 'qrcode': qrcode_base64}
+    except Exception as e:
+        logger.error(f"生成微信二维码失败: {e}")
+        return {'success': False, 'message': f'生成二维码失败: {str(e)}'}
+
+
+@router.get('/wechat/status/{state}')
+async def check_wechat_status(state: str):
+    from db_manager import db_manager
+    from shared import generate_token, TOKEN_EXPIRE_TIME
+    try:
+        cursor = db_manager.conn.cursor()
+        cursor.execute("SELECT used, expires_at, wechat_data FROM wechat_login_states WHERE state = ?", (state,))
+        row = cursor.fetchone()
+        if not row:
+            return {'success': True, 'status': 'expired', 'message': '二维码已过期'}
+
+        used, expires_at, wechat_data = row
+        if used:
+            if wechat_data:
+                data = json.loads(wechat_data)
+                openid = data.get('openid')
+                if openid:
+                    from db_manager import db_manager
+                    user = db_manager.conn.execute(
+                        "SELECT id, username FROM users WHERE wechat_openid = ?", (openid,)
+                    ).fetchone()
+                    if user:
+                        token = generate_token()
+                        db_manager.save_session(token, user[0], user[1], user[1] == 'admin', TOKEN_EXPIRE_TIME)
+                        return {
+                            'success': True, 'status': 'scanned',
+                            'token': token, 'user_id': user[0], 'username': user[1]
+                        }
+            return {'success': True, 'status': 'bind_required', 'message': '扫码成功，请绑定账号'}
+
+        if expires_at < time.time():
+            return {'success': True, 'status': 'expired', 'message': '二维码已过期'}
+
+        return {'success': True, 'status': 'waiting', 'message': '等待扫码...'}
+    except Exception as e:
+        logger.error(f"检查微信状态失败: {e}")
+        return {'success': False, 'message': str(e)}
+
+
+@router.get('/wechat/callback')
+async def wechat_callback(code: str = None, state: str = None):
+    from db_manager import db_manager
+    from shared import generate_token, TOKEN_EXPIRE_TIME
+    if not code or not state:
+        return HTMLResponse('<h3>授权失败：参数不完整</h3>')
+    if not wechat_auth or not wechat_auth.is_configured():
+        return HTMLResponse('<h3>授权失败：微信登录未配置</h3>')
+    if not wechat_auth.check_state(state):
+        return HTMLResponse('<h3>授权失败：二维码已过期或已使用</h3>')
+    try:
+        token_data = wechat_auth.get_access_token(code)
+        if 'errcode' in token_data:
+            return HTMLResponse(f'<h3>授权失败: {token_data.get("errmsg", "")}</h3>')
+
+        access_token = token_data.get('access_token')
+        openid = token_data.get('openid')
+        unionid = token_data.get('unionid')
+
+        user = wechat_auth.get_user_by_openid(openid)
+        if user:
+            wechat_auth.mark_state_used(state)
+            token = generate_token()
+            db_manager.save_session(token, user['id'], user['username'], user.get('is_admin', False), TOKEN_EXPIRE_TIME)
+            return HTMLResponse(f'''
+            <html><body><script>
+            localStorage.setItem('auth_token', '{token}');
+            localStorage.setItem('wechat_login', 'success');
+            window.close();
+            </script><h3>登录成功！窗口即将关闭...</h3></body></html>
+            ''')
+
+        user_info = {}
+        try:
+            user_info = wechat_auth.get_user_info(access_token, openid)
+        except Exception:
+            pass
+
+        wechat_auth.mark_state_used(state)
+        cursor = db_manager.conn.cursor()
+        cursor.execute(
+            "UPDATE wechat_login_states SET wechat_data = ? WHERE state = ?",
+            (json.dumps({'openid': openid, 'unionid': unionid, 'nickname': user_info.get('nickname', ''), 'avatar': user_info.get('headimgurl', '')}, ensure_ascii=False), state)
+        )
+        db_manager.conn.commit()
+
+        return HTMLResponse(f'''
+        <html><body><script>
+        localStorage.setItem('wechat_bind_data', '{json.dumps({"openid": openid, "unionid": unionid, "nickname": user_info.get("nickname", ""), "avatar": user_info.get("headimgurl", "")}, ensure_ascii=False)}');
+        localStorage.setItem('wechat_login', 'bind_required');
+        window.close();
+        </script><h3>请返回首页绑定账号...</h3></body></html>
+        ''')
+    except Exception as e:
+        logger.error(f"微信回调处理失败: {e}")
+        return HTMLResponse(f'<h3>授权处理失败: {str(e)}</h3>')
+
+
+@router.post('/wechat/bind')
+async def bind_wechat(request: Request, current_user=Depends(get_current_user)):
+    if not wechat_auth or not wechat_auth.is_configured():
+        return {'success': False, 'message': '微信登录未配置'}
+    data = await request.json()
+    openid = data.get('openid')
+    if not openid:
+        return {'success': False, 'message': '缺少openid参数'}
+    existing = wechat_auth.get_user_by_openid(openid)
+    if existing and existing['id'] != current_user['user_id']:
+        return {'success': False, 'message': '该微信已绑定其他账号'}
+    wechat_auth.bind_wechat(
+        current_user['user_id'], openid,
+        data.get('unionid'), data.get('nickname', ''), data.get('avatar', '')
+    )
+    return {'success': True, 'message': '微信绑定成功'}
+
+
+@router.post('/wechat/unbind')
+async def unbind_wechat(current_user=Depends(get_current_user)):
+    if not wechat_auth:
+        return {'success': False, 'message': '微信登录未配置'}
+    wechat_auth.unbind_wechat(current_user['user_id'])
+    return {'success': True, 'message': '微信已解绑'}
+
+
+@router.get('/wechat/info')
+async def get_wechat_info(current_user=Depends(get_current_user)):
+    if not wechat_auth:
+        return {'success': True, 'bound': False, 'message': '微信登录未配置'}
+    info = wechat_auth.get_wechat_info(current_user['user_id'])
+    return {'success': True, **info}
 
 
 # 验证图形验证码接口
