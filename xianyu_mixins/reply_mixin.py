@@ -793,7 +793,7 @@ class ReplyMixin:
                     # 兼容不同版本的websockets库
                     async with await self._create_websocket_connection(headers) as websocket:
                         self.ws = websocket
-                        logger.info(f"【{self.cookie_id}】WebSocket连接建立成功，开始初始化...")
+                        logger.debug(f"【{self.cookie_id}】WebSocket连接建立成功，开始初始化...")
 
                         try:
                             # 开始初始化
@@ -877,7 +877,7 @@ class ReplyMixin:
                             logger.info(f"【{self.cookie_id}】准备进入消息循环...")
 
                             async for message in websocket:
-                                logger.info(f"【{self.cookie_id}】收到WebSocket消息: {len(message) if message else 0} 字节")
+                                logger.debug(f"【{self.cookie_id}】收到WebSocket消息: {len(message) if message else 0} 字节")
                                 try:
                                     message_data = json.loads(message)
 
@@ -951,6 +951,17 @@ class ReplyMixin:
                     # 检查是否超过最大失败次数
                     if self.connection_failures >= self.max_connection_failures:
                         self._set_connection_state(ConnectionState.FAILED, f"连续失败{self.max_connection_failures}次")
+
+                        # 防止频繁触发浏览器登录：至少间隔5分钟
+                        now = time.time()
+                        last_refresh = getattr(self, '_last_password_login_attempt', 0)
+                        if now - last_refresh < 300:
+                            cooldown_remain = int(300 - (now - last_refresh))
+                            logger.warning(f"【{self.cookie_id}】密码登录冷却中，跳过本次尝试（剩余{cooldown_remain}秒），增加等待时间后重试")
+                            self.connection_failures = max(self.connection_failures - 1, 0)
+                            await asyncio.sleep(min(60, cooldown_remain))
+                            continue
+                        self._last_password_login_attempt = now
                         logger.warning(f"【{self.cookie_id}】连续失败{self.max_connection_failures}次，尝试通过密码登录刷新Cookie...")
                         
                         try:
@@ -1022,41 +1033,28 @@ class ReplyMixin:
                         except:
                             pass
                         
-                        # 使用可中断的sleep，每5秒输出一次心跳日志
-                        chunk_size = 5.0  # 每5秒输出一次日志
+                        # 使用可中断的sleep，长等待时只在最后输出一次日志
                         remaining = retry_delay
                         start_time = time.time()
+                        logged_heartbeat = False
                         
                         while remaining > 0:
-                            sleep_time = min(chunk_size, remaining)
+                            sleep_time = min(10.0, remaining)
                             try:
                                 await asyncio.sleep(sleep_time)
                                 remaining -= sleep_time
                                 elapsed = time.time() - start_time
-                                if remaining > 0:
-                                    logger.info(f"【{self.cookie_id}】等待中... 已等待 {elapsed:.1f} 秒，剩余 {remaining:.1f} 秒")
-                                    # 定期刷新日志
-                                    try:
-                                        sys.stdout.flush()
-                                    except:
-                                        pass
+                                if remaining > 10.0 and not logged_heartbeat:
+                                    logger.debug(f"【{self.cookie_id}】等待中... 已等待 {elapsed:.1f} 秒，剩余 {remaining:.1f} 秒")
+                                    logged_heartbeat = True
                             except asyncio.CancelledError:
-                                logger.warning(f"【{self.cookie_id}】等待期间收到取消信号")
                                 raise
-                            except Exception as sleep_error:
-                                logger.error(f"【{self.cookie_id}】等待期间发生异常: {self._safe_str(sleep_error)}")
-                                logger.warning(f"【{self.cookie_id}】等待异常堆栈:\n{traceback.format_exc()}")
-                                # 即使出错也继续等待剩余时间
+                            except Exception:
                                 if remaining > 0:
                                     await asyncio.sleep(remaining)
                                 break
                         
-                        logger.info(f"【{self.cookie_id}】等待完成（总耗时 {time.time() - start_time:.1f} 秒），准备重新连接...")
-                        # 再次强制刷新日志
-                        try:
-                            sys.stdout.flush()
-                        except:
-                            pass
+                        logger.debug(f"【{self.cookie_id}】等待完成（总耗时 {time.time() - start_time:.1f} 秒），准备重新连接...")
                         
                     except Exception as cleanup_error:
                         logger.error(f"【{self.cookie_id}】清理过程出错: {self._safe_str(cleanup_error)}")
@@ -1070,32 +1068,21 @@ class ReplyMixin:
                         self.cookie_refresh_task = None
                         self.item_sync_task = None
                         logger.warning(f"【{self.cookie_id}】清理失败，已强制重置所有任务引用")
-                        # 使用可中断的sleep，并定期输出日志
-                        logger.info(f"【{self.cookie_id}】清理失败后开始等待 {retry_delay} 秒...")
-                        chunk_size = 5.0
                         remaining = retry_delay
-                        start_time = time.time()
-                        
                         while remaining > 0:
-                            sleep_time = min(chunk_size, remaining)
+                            sleep_time = min(10.0, remaining)
                             try:
                                 await asyncio.sleep(sleep_time)
                                 remaining -= sleep_time
-                                if remaining > 0:
-                                    logger.info(f"【{self.cookie_id}】清理失败后等待中... 剩余 {remaining:.1f} 秒")
                             except asyncio.CancelledError:
-                                logger.warning(f"【{self.cookie_id}】清理失败后等待期间收到取消信号")
                                 raise
-                            except Exception as sleep_error:
-                                logger.error(f"【{self.cookie_id}】清理失败后等待期间发生异常: {self._safe_str(sleep_error)}")
+                            except Exception:
                                 if remaining > 0:
                                     await asyncio.sleep(remaining)
                                 break
-                        
-                        logger.info(f"【{self.cookie_id}】清理失败后等待完成（总耗时 {time.time() - start_time:.1f} 秒）")
                     
                     # 继续下一次循环
-                    logger.info(f"【{self.cookie_id}】开始新一轮WebSocket连接尝试...")
+                    logger.debug(f"【{self.cookie_id}】开始新一轮WebSocket连接尝试...")
                     continue
         finally:
             # 更新连接状态为已关闭

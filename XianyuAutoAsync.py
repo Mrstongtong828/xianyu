@@ -3116,7 +3116,7 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
         try:
             await asyncio.wait_for(ws.send(json.dumps(msg)), timeout=2.0)
             self.last_heartbeat_time = time.time()
-            logger.warning(f"【{self.cookie_id}】心跳包已发送")
+            logger.debug(f"【{self.cookie_id}】心跳包已发送")
         except asyncio.TimeoutError:
             raise ConnectionError("心跳发送超时，WebSocket可能已断开")
         except asyncio.CancelledError:
@@ -3185,7 +3185,7 @@ class XianyuLive(ConnectionMixin, MessageMixin, OrderMixin, ReplyMixin, ItemMixi
         try:
             if message_data.get("code") == 200:
                 self.last_heartbeat_response = time.time()
-                logger.warning("心跳响应正常")
+                logger.debug("心跳响应正常")
                 return True
         except Exception as e:
             logger.error(f"处理心跳响应出错: {self._safe_str(e)}")

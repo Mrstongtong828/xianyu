@@ -1,8 +1,13 @@
 from __future__ import annotations
 import asyncio
+import hashlib
+import time
+import sys
 from typing import Dict, List, Tuple, Optional
 from loguru import logger
 from db_manager import db_manager
+
+import aiohttp
 
 __all__ = ["CookieManager", "manager"]
 
@@ -45,6 +50,152 @@ class CookieManager:
         except Exception as e:
             logger.error(f"从数据库加载数据失败: {e}")
 
+    # ------------------------ 会话新鲜度验证 ------------------------
+    SESSION_CHECK_URL = "https://h5api.m.goofish.com/h5/mtop.taobao.idlemessage.pc.login.token/1.0/"
+    SESSION_EXPIRY_PATTERNS = [
+        "FAIL_SYS_SESSION_EXPIRED",
+        "Session过期",
+    ]
+    SESSION_CHECK_TIMEOUT = aiohttp.ClientTimeout(total=15)
+
+    @staticmethod
+    def _is_session_expiry_error(error_message: str) -> bool:
+        """检查错误消息是否属于 Session/令牌 过期类错误"""
+        if not error_message:
+            return False
+        expiry_keywords = [
+            "FAIL_SYS_SESSION_EXPIRED",
+            "Session过期",
+            "FAIL_SYS_TOKEN_EXPIRED",
+            "FAIL_SYS_TOKEN_EXOIRED",
+            "令牌过期",
+        ]
+        return any(kw in error_message for kw in expiry_keywords)
+
+    @staticmethod
+    def _parse_cookie_dict(cookie_str: str) -> Dict[str, str]:
+        """将 Cookie 字符串解析为 dict"""
+        result = {}
+        for part in cookie_str.split(";"):
+            part = part.strip()
+            if "=" in part:
+                key, _, val = part.partition("=")
+                result[key.strip()] = val.strip()
+        return result
+
+    @staticmethod
+    def _generate_sign(t: str, token: str, data: str) -> str:
+        """生成签名（与 refresh_util 中逻辑一致）"""
+        app_key = "34839810"
+        msg = f"{token}&{t}&{app_key}&{data}"
+        return hashlib.md5(msg.encode("utf-8")).hexdigest()
+
+    async def validate_cookie_freshness(self, cookie_id: str, cookie_value: str) -> Tuple[bool, str]:
+        """通过轻量 HTTP 请求检查 Cookie/Session 是否仍有效
+
+        Args:
+            cookie_id: Cookie 标识
+            cookie_value: 原始 Cookie 字符串
+
+        Returns:
+            (is_valid, reason) 元组
+             - 有效: (True, "ok")
+             - session 过期: (False, "session_expired")
+             - 网络异常等: (True, "network_check_failed")  不阻塞启动
+        """
+        cookie_dict = self._parse_cookie_dict(cookie_value)
+        m_h5_tk = cookie_dict.get("_m_h5_tk", "")
+        token = m_h5_tk.split("_")[0] if m_h5_tk else ""
+
+        t = str(int(time.time() * 1000))
+        data_val = '{"appKey":"444e9908a51d1cb236a27862abc769c9","deviceId":""}'
+        sign = self._generate_sign(t, token, data_val) if token else ""
+
+        params = {
+            "jsv": "2.7.2",
+            "appKey": "34839810",
+            "t": t,
+            "sign": sign,
+            "v": "1.0",
+            "type": "originaljson",
+            "accountSite": "xianyu",
+            "dataType": "json",
+            "timeout": "20000",
+            "api": "mtop.taobao.idlemessage.pc.login.token",
+            "sessionOption": "AutoLoginOnly",
+            "spm_cnt": "a21ybx.im.0.0",
+        }
+        post_data = {"data": data_val}
+
+        headers = {
+            "Cookie": cookie_value,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+        }
+
+        try:
+            async with aiohttp.ClientSession(timeout=self.SESSION_CHECK_TIMEOUT) as session:
+                async with session.post(
+                    self.SESSION_CHECK_URL,
+                    params=params,
+                    data=post_data,
+                    headers=headers,
+                ) as resp:
+                    text = await resp.text()
+        except (aiohttp.ClientError, asyncio.TimeoutError) as net_e:
+            logger.warning(f"【{cookie_id}】会话新鲜度检测网络异常（不阻塞启动）: {net_e}")
+            return True, "network_check_failed"
+        except Exception as e:
+            logger.warning(f"【{cookie_id}】会话新鲜度检测未知异常（不阻塞启动）: {e}")
+            return True, "check_exception"
+
+        lower_text = text.lower()
+        for pattern in self.SESSION_EXPIRY_PATTERNS:
+            if pattern.lower() in lower_text:
+                logger.warning(f"【{cookie_id}】Cookie session已过期: {text[:200]}")
+                return False, "session_expired"
+
+        return True, "ok"
+
+    async def pre_validate_all_cookies(self) -> Dict[str, Tuple[bool, str]]:
+        """启动前对所有启用 Cookie 进行轻量会话新鲜度验证
+
+        不会阻塞启动，即使验证失败也只记录警告。
+        如果所有 Cookie 都过期，不会阻止 XianyuLive 启动，
+        只是提前记录警告供运维参考。
+
+        Returns:
+            dict: cookie_id -> (is_valid, reason) 映射
+        """
+        results: Dict[str, Tuple[bool, str]] = {}
+        enabled = self.get_enabled_cookies()
+        if not enabled:
+            logger.info("没有启用的 Cookie 需要验证")
+            return results
+
+        logger.info(f"开始对 {len(enabled)} 个启用 Cookie 进行会话新鲜度预检...")
+        coros = []
+        ids = []
+        for cid, cval in enabled.items():
+            coros.append(self.validate_cookie_freshness(cid, cval))
+            ids.append(cid)
+
+        gathered = await asyncio.gather(*coros, return_exceptions=True)
+        for cid, result in zip(ids, gathered):
+            if isinstance(result, Exception):
+                logger.warning(f"【{cid}】预检异常: {result}")
+                results[cid] = (True, "pre_check_exception")
+            else:
+                is_valid, reason = result
+                results[cid] = (is_valid, reason)
+                if not is_valid:
+                    logger.warning(f"[WARN] Cookie {cid} session已过期，将尝试自动刷新登录")
+
+        valid_count = sum(1 for v in results.values() if v[0])
+        expired_count = len(results) - valid_count
+        logger.info(f"会话新鲜度预检完成: {valid_count} 有效, {expired_count} 过期")
+        return results
+
     def reload_from_db(self):
         """重新从数据库加载所有数据（用于备份导入后刷新）"""
         logger.info("重新从数据库加载数据...")
@@ -72,43 +223,33 @@ class CookieManager:
 
             logger.info(f"【{cookie_id}】开始创建XianyuLive实例...")
             logger.info(f"【{cookie_id}】Cookie值长度: {len(cookie_value)}")
-            live = XianyuLive(cookie_value, cookie_id=cookie_id, user_id=user_id)
-            logger.info(f"【{cookie_id}】XianyuLive实例创建成功，开始调用main()...")
-            
-            # 强制刷新日志，确保日志被写入
+
             try:
-                import sys
-                sys.stdout.flush()
-            except Exception:
-                pass
-            
+                live = XianyuLive(cookie_value, cookie_id=cookie_id, user_id=user_id)
+                logger.info(f"【{cookie_id}】XianyuLive实例创建成功，开始调用main()...")
+            except Exception as ctor_e:
+                ctor_msg = str(ctor_e)
+                if self._is_session_expiry_error(ctor_msg):
+                    logger.error(
+                        f"【{cookie_id}】XianyuLive 构造函数失败（session已过期），需要手动重新登录: {ctor_e}"
+                    )
+                else:
+                    logger.error(f"【{cookie_id}】XianyuLive 构造函数失败: {ctor_e}")
+                raise
+
             await live.main()
-            
+
             # main() 正常退出（不应该发生，因为main()内部有无限循环）
             logger.warning(f"【{cookie_id}】XianyuLive.main() 正常退出（这通常不应该发生）")
         except asyncio.CancelledError:
             logger.info(f"【{cookie_id}】XianyuLive 任务已取消")
-            # 强制刷新日志
-            try:
-                import sys
-                sys.stdout.flush()
-            except Exception:
-                pass
         except Exception as e:
             logger.error(f"【{cookie_id}】XianyuLive 任务异常: {e}")
             import traceback
             logger.error(f"【{cookie_id}】详细错误信息:\n{traceback.format_exc()}")
-            # 强制刷新日志
-            try:
-                import sys
-                sys.stdout.flush()
-            except Exception:
-                pass
         finally:
             logger.info(f"【{cookie_id}】_run_xianyu方法执行结束")
-            # 确保日志被刷新
             try:
-                import sys
                 sys.stdout.flush()
             except Exception:
                 pass
@@ -470,6 +611,15 @@ class CookieManager:
                 logger.error(
                     f"【{cookie_id}】任务异常退出 (重启{restart_count}/{self._max_restart_count}): {exc}"
                 )
+
+                # 检查是否是 session/令牌 过期，此类错误自动重启无效
+                exc_msg = str(exc)
+                if self._is_session_expiry_error(exc_msg):
+                    logger.error(
+                        f"【{cookie_id}】Session已过期，需要手动重新登录，跳过自动重启"
+                    )
+                    self._task_restart_count.pop(cookie_id, None)
+                    continue
             else:
                 logger.warning(
                     f"【{cookie_id}】任务意外正常退出 (重启{restart_count}/{self._max_restart_count})"
