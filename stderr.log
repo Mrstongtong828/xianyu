@@ -1,0 +1,18 @@
+2026-05-07 08:20:23.070 | INFO     | db_manager:__init__:90 - 数据库路径: data/xianyu_data.db
+2026-05-07 08:20:23.072 | INFO     | db_manager:__init__:104 - SQL日志已启用，日志级别: INFO
+2026-05-07 08:20:23.084 | INFO     | db_manager:check_and_upgrade_db:806 - 当前数据库版本: 1.6
+2026-05-07 08:20:23.085 | INFO     | db_manager:migrate_legacy_data:903 - 开始检查和迁移遗留数据...
+2026-05-07 08:20:23.085 | INFO     | db_manager:migrate_legacy_data:919 - 遗留数据迁移完成
+2026-05-07 08:20:23.085 | INFO     | db_manager:_update_cards_table_constraints:742 - cards表约束检查通过，支持image类型
+2026-05-07 08:20:23.091 | WARNING  | db_manager:_create_indexes:730 - 创建索引时出现警告: no such column: id
+2026-05-07 08:20:23.094 | INFO     | db_manager:init_db:645 - 数据库初始化完成
+2026-05-07 08:20:23.103 | INFO     | file_log_collector:setup_loguru_file_output:72 - 文件日志收集器已启动
+2026-05-07 08:20:23.103 | INFO     | __main__:main:803 - 文件日志收集器已启动，开始收集实时日志
+2026-05-07 08:20:23.106 | INFO     | cookie_manager:_load_from_db:44 - 从数据库加载了 3 个Cookie、0 组关键字、3 个状态记录和 3 个自动确认设置
+2026-05-07 08:20:23.106 | INFO     | cookie_manager:_start_health_monitor:448 - 任务健康监控已启动
+2026-05-07 08:20:23.110 | INFO     | __main__:_start_api_server:750 - 启动Web服务器: http://0.0.0.0:8080 (第1次)
+2026-05-07 08:20:24.802 | INFO     | utils.xianyu_utils:<module>:27 - 可用的JavaScript运行时: <module 'execjs.runtime_names' from "C:\\Users\\tong'tong\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages\\execjs\\runtime_names.py">
+2026-05-07 08:20:24.802 | INFO     | utils.xianyu_utils:<module>:31 - 当前JavaScript运行时: Node.js (V8)
+2026-05-07 08:20:24.802 | INFO     | utils.xianyu_utils:<module>:34 - JavaScript文件加载成功
+2026-05-07 08:20:24.817 | INFO     | utils.image_utils:_ensure_upload_dir:30 - 图片上传目录已准备: static/uploads/images
+2026-05-07 08:20:24.879 | INFO     | reply_server:<module>:126 - Web服务器启动，文件日志收集器已初始化

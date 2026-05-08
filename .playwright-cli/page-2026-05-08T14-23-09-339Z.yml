@@ -1,0 +1,22 @@
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - generic [ref=e9] [cursor=pointer]: 闲
+    - heading "欢迎回来" [level=2] [ref=e10]
+    - paragraph [ref=e11]: 闲鱼智能自动发货与管家系统
+  - generic [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - img [ref=e15]
+        - textbox "用户名" [ref=e18]
+      - generic [ref=e19]:
+        - img [ref=e20]
+        - textbox "密码" [ref=e23]
+    - button "登录" [ref=e24] [cursor=pointer]:
+      - img [ref=e25]
+      - text: 登录
+    - button "微信扫码登录" [ref=e27] [cursor=pointer]:
+      - img [ref=e28]
+      - text: 微信扫码登录
+  - paragraph [ref=e34]:
+    - text: 还没有账号？
+    - button "立即注册" [ref=e35] [cursor=pointer]
