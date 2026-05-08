@@ -1,69 +1,17 @@
-﻿# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
-dist/
-build/
+﻿myenv/
 venv/
-.venv/
-env/
 
-# IDE / Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Runtime data
-browser_data/
-data/
-logs/
-trajectory_history/
-realtime.log
-server_output.log
-*.log
-
-# Database
-*.db
-*.db-shm
-*.db-wal
-*.db-journal
-
-# Sensitive config
+# 敏感配置与账号凭证
 global_config.yml
-.env
-.env.*
-data/.sensitive_key
-data/.admin_default_password
-
-# Static uploads
+browser_data/
+logs/
+realtime.log
+trajectory_history/
 static/uploads/
-static/assets/
 
-# Frontend build artifacts
-frontend/node_modules/
-frontend/dist/
-xy/node_modules/
+# Python 缓存
+__pycache__/
+utils/__pycache__/
 
-# Playwright
-playwright/
-.playwright-cli/
-
-# Docker
-docker-compose.override.yml
-docker-data/
-
-# OpenCode
-.opencode/
-
-# Misc
-*.bak
-*.backup
-*.tmp
+# Claude 配置
+.claude/
